@@ -7,6 +7,7 @@ from os.path import join as pjoin
 from torch.distributions import Categorical
 import json
 import clip
+from tqdm import tqdm
 
 import options.option_transformer as option_trans
 import models.vqvae as vqvae
@@ -35,8 +36,6 @@ logger = utils_model.get_logger(args.out_dir)
 writer = SummaryWriter(args.out_dir)
 logger.info(json.dumps(vars(args), indent=4, sort_keys=True))
 
-##### ---- Dataloader ---- #####
-train_loader_token = dataset_tokenize.DATALoader(args.dataname, 1, unit_length=2**args.down_t)
 
 from utils.word_vectorizer import WordVectorizer
 w_vectorizer = WordVectorizer('./glove', 'our_vab')
@@ -93,34 +92,52 @@ optimizer = utils_model.initial_optim(args.decay_option, args.lr, args.weight_de
 scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=args.lr_scheduler, gamma=args.gamma)
 
 ##### ---- Optimization goals ---- #####
-loss_ce = torch.nn.CrossEntropyLoss()
+loss_ce = torch.nn.CrossEntropyLoss(ignore_index=-100, reduction='none')
 
 nb_iter, avg_loss_cls, avg_acc = 0, 0., 0.
 right_num = 0
 nb_sample_train = 0
 
 ##### ---- get code ---- #####
-for batch in train_loader_token:
-    pose, name = batch
-    bs, seq = pose.shape[0], pose.shape[1]
 
-    pose = pose.cuda().float() # bs, nb_joints, joints_dim, seq_len
-    target = net.encode(pose)
-    target = target.cpu().numpy()
-    np.save(pjoin(args.vq_dir, name[0] +'.npy'), target)
+##### ---- Dataloader ---- #####
+if not os.path.exists('dataset/HumanML3D/VQVAE/000002.npy'):
+    train_loader_token = dataset_tokenize.DATALoader(args.dataname, 1, unit_length=2**args.down_t)
+    for batch in tqdm(train_loader_token):
+        pose, name = batch
+        # if os.path.exists(pjoin(args.vq_dir, name[0] +'.npy')):
+        #     break
+
+        bs, seq = pose.shape[0], pose.shape[1]
+
+        pose = pose.cuda().float() # bs, nb_joints, joints_dim, seq_len
+        target = net.encode(pose)
+        target = target.cpu().numpy()
+        np.save(pjoin(args.vq_dir, name[0] +'.npy'), target)
 
 
-train_loader = dataset_TM_train.DATALoader(args.dataname, args.batch_size, args.nb_code, args.vq_name, unit_length=2**args.down_t)
+train_loader = dataset_TM_train.DATALoader(args.dataname, args.batch_size, args.nb_code, args.vq_name, unit_length=2**args.down_t, num_workers=8)
 train_loader_iter = dataset_TM_train.cycle(train_loader)
 
-        
+
+# print('Start evaluation first')
 ##### ---- Training ---- #####
-best_fid, best_iter, best_div, best_top1, best_top2, best_top3, best_matching, writer, logger = eval_trans.evaluation_transformer(args.out_dir, val_loader, net, trans_encoder, logger, writer, 0, best_fid=1000, best_iter=0, best_div=100, best_top1=0, best_top2=0, best_top3=0, best_matching=100, clip_model=clip_model, eval_wrapper=eval_wrapper)
+# best_fid, best_iter, best_div, best_top1, best_top2, best_top3, best_matching, writer, logger = eval_trans.evaluation_transformer(
+#     args.out_dir, val_loader, net, trans_encoder, logger, writer, 0, best_fid=1000, best_iter=0, best_div=100, best_top1=0, best_top2=0, best_top3=0, best_matching=100, clip_model=clip_model, eval_wrapper=eval_wrapper)
+best_fid=1000
+best_iter=0
+best_div=100
+best_top1=0
+best_top2=0
+best_top3=0
+best_matching=100
+
+print('Start training')
 while nb_iter <= args.total_iter:
-    
+    # print(nb_iter)
     batch = next(train_loader_iter)
-    clip_text, m_tokens, m_tokens_len = batch
-    m_tokens, m_tokens_len = m_tokens.cuda(), m_tokens_len.cuda()
+    clip_text, m_tokens, m_tokens_len, mask_token = batch
+    m_tokens, m_tokens_len, mask_token = m_tokens.cuda(), m_tokens_len.cuda(), mask_token.cuda()
     bs = m_tokens.shape[0]
     target = m_tokens    # (bs, 26)
     target = target.cuda()
@@ -146,20 +163,40 @@ while nb_iter <= args.total_iter:
     cls_pred = cls_pred.contiguous()
 
     loss_cls = 0.0
-    for i in range(bs):
-        # loss function     (26), (26, 513)
-        loss_cls += loss_ce(cls_pred[i][:m_tokens_len[i] + 1], target[i][:m_tokens_len[i] + 1]) / bs
+    target[~mask_token] = -100
 
-        # Accuracy
-        probs = torch.softmax(cls_pred[i][:m_tokens_len[i] + 1], dim=-1)
+    # breakpoint()
+    loss_cls = loss_ce(cls_pred.permute(0,2,1), target) # B, len
+    loss_cls = (loss_cls.sum(-1) / m_tokens_len)
+    loss_cls = loss_cls.mean()
 
-        if args.if_maxtest:
-            _, cls_pred_index = torch.max(probs, dim=-1)
 
-        else:
-            dist = Categorical(probs)
-            cls_pred_index = dist.sample()
-        right_num += (cls_pred_index.flatten(0) == target[i][:m_tokens_len[i] + 1].flatten(0)).sum().item()
+
+    cls_pred[~mask_token] = -float("inf")
+
+    # breakpoint()
+    probs = torch.softmax(cls_pred, dim=-1)
+    probs[~mask_token] = 1e-6
+    dist = Categorical(probs)
+    cls_pred_index = dist.sample()
+    cls_pred_index[~mask_token] = -1111
+    right_num += (cls_pred_index.flatten(0) == target.flatten(0)).sum().item()
+
+
+    # for i in range(bs):
+    #     # loss function     (26), (26, 513)
+    #     loss_cls += loss_ce(cls_pred[i][:m_tokens_len[i] + 1], target[i][:m_tokens_len[i] + 1]) / bs
+
+    #     # Accuracy
+    #     probs = torch.softmax(cls_pred[i][:m_tokens_len[i] + 1], dim=-1)
+
+    #     if args.if_maxtest:
+    #         _, cls_pred_index = torch.max(probs, dim=-1)
+
+    #     else:
+    #         dist = Categorical(probs)
+    #         cls_pred_index = dist.sample()
+    #     right_num += (cls_pred_index.flatten(0) == target[i][:m_tokens_len[i] + 1].flatten(0)).sum().item()
 
     ## global loss
     optimizer.zero_grad()

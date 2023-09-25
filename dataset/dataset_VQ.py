@@ -52,11 +52,12 @@ class VQMotionDataset(data.Dataset):
                     continue
                 self.lengths.append(motion.shape[0] - self.window_size)
                 self.data.append(motion)
+
+                # breakpoint()
             except:
                 # Some motion may not exist in KIT dataset
                 pass
 
-            
         self.mean = mean
         self.std = std
         print("Total number of motions {}".format(len(self.data)))

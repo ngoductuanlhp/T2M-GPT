@@ -109,6 +109,8 @@ class Text2MotionDataset(data.Dataset):
         return len(self.data_dict)
 
     def __getitem__(self, item):
+
+        # print('0')
         data = self.data_dict[self.name_list[item]]
         m_token_list, text_list = data['m_token_list'], data['text']
         m_tokens = random.choice(m_token_list)
@@ -116,6 +118,7 @@ class Text2MotionDataset(data.Dataset):
         text_data = random.choice(text_list)
         caption= text_data['caption']
 
+        # print('1')
         
         coin = np.random.choice([False, False, True])
         # print(len(m_tokens))
@@ -128,12 +131,17 @@ class Text2MotionDataset(data.Dataset):
                 m_tokens = m_tokens[1:]
         m_tokens_len = m_tokens.shape[0]
 
+
+        # print('2')
+
         if m_tokens_len+1 < self.max_motion_length:
             m_tokens = np.concatenate([m_tokens, np.ones((1), dtype=int) * self.mot_end_idx, np.ones((self.max_motion_length-1-m_tokens_len), dtype=int) * self.mot_pad_idx], axis=0)
         else:
             m_tokens = np.concatenate([m_tokens, np.ones((1), dtype=int) * self.mot_end_idx], axis=0)
 
-        return caption, m_tokens.reshape(-1), m_tokens_len
+        mask_token = np.ones((m_tokens.shape[0]), dtype=bool)
+        mask_token[m_tokens_len+1:] = 0
+        return caption, m_tokens.reshape(-1), m_tokens_len, mask_token
 
 
 

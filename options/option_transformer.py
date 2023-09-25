@@ -58,7 +58,7 @@ def get_args_parser():
     parser.add_argument('--exp-name', type=str, default='exp_debug', help='name of the experiment, will create a file inside out-dir')
     parser.add_argument('--vq-name', type=str, default='exp_debug', help='name of the generated dataset .npy, will create a file inside out-dir')
     ## other
-    parser.add_argument('--print-iter', default=200, type=int, help='print frequency')
+    parser.add_argument('--print-iter', default=50, type=int, help='print frequency')
     parser.add_argument('--eval-iter', default=5000, type=int, help='evaluation frequency')
     parser.add_argument('--seed', default=123, type=int, help='seed for initializing training. ')
     parser.add_argument("--if-maxtest", action='store_true', help="test in max")

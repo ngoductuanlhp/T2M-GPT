@@ -18,6 +18,8 @@ import math
 # import ffmpeg
 from PIL import Image
 
+from utils.mesh_o3d import MeshO3d
+
 class WeakPerspectiveCamera(pyrender.Camera):
     def __init__(self,
                  scale,
@@ -57,7 +59,9 @@ def render(motions, outdir='test_vis', device_id=0, name=None, pred=True):
 
     if (not os.path.exists(outdir + name+'_pred.pt') and pred) or (not os.path.exists(outdir + name+'_gt.pt') and not pred): 
         print(f'Running SMPLify, it may take a few minutes.')
-        motion_tensor, opt_dict = j2s.joint2smpl(motions)  # [nframes, njoints, 3]
+        theta, loc, motion_tensor, opt_dict = j2s.joint2smpl(motions)  # [nframes, njoints, 3]
+
+        # np.savez(fn, x=x, y=y)
 
         vertices = rot2xyz(torch.tensor(motion_tensor).clone(), mask=None,
                                         pose_rep='rot6d', translation=True, glob=True,
@@ -89,11 +93,14 @@ def render(motions, outdir='test_vis', device_id=0, name=None, pred=True):
     polygon = geometry.Polygon([[minx, minz], [minx, maxz], [maxx, maxz], [maxx, minz]])
     polygon_mesh = trimesh.creation.extrude_polygon(polygon, 1e-5)
 
+
+    count_save = 0
     vid = []
     for i in range(frames):
         if i % 10 == 0:
             print(i)
 
+        
         mesh = Trimesh(vertices=vertices[0, :, :, i].squeeze().tolist(), faces=faces)
 
         base_color = (0.11, 0.53, 0.8, 0.5)
@@ -105,8 +112,24 @@ def render(motions, outdir='test_vis', device_id=0, name=None, pred=True):
             baseColorFactor=base_color
         )
 
+        # random_inds = np.random.choice(a=6890, size=2757, replace=False)
+        # vertices_subsample = vertices[:, random_inds, :, :]
+        # mesh_subsample = Trimesh(vertices=vertices_subsample[0, :, :, i].squeeze().tolist(), faces=faces)
+        
+        # if i %  == 0:
 
+            
+        saved_mesh = MeshO3d(vertices[0, :, :, i].squeeze().cpu().numpy(), f=faces)
+        saved_mesh.write_obj(f'results/debug_t2m/motion2/objects/{count_save}.obj')
+
+        # trimesh.exchange.export.export_mesh(mesh, f'results/objects/{count_save}.obj')
+        count_save += 1
+            # quit()
+
+        # breakpoint()
         mesh = pyrender.Mesh.from_trimesh(mesh, material=material)
+        # trimesh.exchange.obj.export_obj()
+        # breakpoint()
 
         polygon_mesh.visual.face_colors = [0, 0, 0, 0.21]
         polygon_render = pyrender.Mesh.from_trimesh(polygon_mesh, smooth=False)
@@ -166,9 +189,9 @@ def render(motions, outdir='test_vis', device_id=0, name=None, pred=True):
 
     out = np.stack(vid, axis=0)
     if pred:
-        imageio.mimsave(outdir + name+'_pred.gif', out, fps=20)
+        imageio.mimsave(outdir + name+'_pred.gif', out, duration=50)
     else:
-        imageio.mimsave(outdir + name+'_gt.gif', out, fps=20)
+        imageio.mimsave(outdir + name+'_gt.gif', out, duration=50)
     
 
 
@@ -183,12 +206,20 @@ if __name__ == "__main__":
 
     filename_list = args.motion_list
     filedir = args.filedir
-    
-    for filename in filename_list:
-        motions = np.load(filedir + filename+'_pred.npy')
-        print('pred', motions.shape, filename)
-        render(motions[0], outdir=filedir, device_id=0, name=filename, pred=True)
 
-        motions = np.load(filedir + filename+'_gt.npy')
-        print('gt', motions.shape, filename)
-        render(motions[0], outdir=filedir, device_id=0, name=filename, pred=False)
+    motion_path = 'results/debug_t2m/2.npy'
+    motions = np.load(motion_path)
+    motion_name = os.path.basename(motion_path)
+    
+    # motions = motions[0,0]
+    # print('pred', motions.shape)
+    render(motions[0], outdir='./results/debug_t2m/', device_id=0, name=motion_name, pred=True)
+    
+    # for filename in filename_list:
+    #     motions = np.load(filedir + filename+'_pred.npy')
+    #     print('pred', motions.shape, filename)
+    #     render(motions[0], outdir=filedir, device_id=0, name=filename, pred=True)
+
+    #     motions = np.load(filedir + filename+'_gt.npy')
+    #     print('gt', motions.shape, filename)
+    #     render(motions[0], outdir=filedir, device_id=0, name=filename, pred=False)
