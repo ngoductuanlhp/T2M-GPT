@@ -28,7 +28,7 @@ class Text2MotionDataset(data.Dataset):
         self.mot_pad_idx = codebook_size + 1
         if dataset_name == 't2m':
             self.data_root = './dataset/HumanML3D'
-            self.motion_dir = pjoin(self.data_root, 'new_joint_vecs')
+            self.motion_dir = pjoin(self.data_root, 'new_joint_vecs_rot6d')
             self.text_dir = pjoin(self.data_root, 'texts')
             self.joints_num = 22
             radius = 4

@@ -1,5 +1,5 @@
 CUDA_VISIBLE_DEVICES=$1 python3 train_t2m_trans.py  \
---exp-name GPT_debug \
+--exp-name GPT_rot6d \
 --batch-size 512 \
 --num-layers 9 \
 --embed-dim-gpt 1024 \
@@ -8,7 +8,7 @@ CUDA_VISIBLE_DEVICES=$1 python3 train_t2m_trans.py  \
 --block-size 51 \
 --ff-rate 4 \
 --drop-out-rate 0.1 \
---resume-pth output/VQVAE/net_best_fid.pth \
+--resume-pth output/VQVAE_rot6d/net_last.pth \
 --vq-name VQVAE \
 --out-dir output \
 --total-iter 50000 \

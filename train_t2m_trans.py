@@ -41,10 +41,10 @@ from utils.word_vectorizer import WordVectorizer
 w_vectorizer = WordVectorizer('./glove', 'our_vab')
 val_loader = dataset_TM_eval.DATALoader(args.dataname, False, 32, w_vectorizer)
 
-dataset_opt_path = 'checkpoints/kit/Comp_v6_KLD005/opt.txt' if args.dataname == 'kit' else 'checkpoints/t2m/Comp_v6_KLD005/opt.txt'
+# dataset_opt_path = 'checkpoints/kit/Comp_v6_KLD005/opt.txt' if args.dataname == 'kit' else 'checkpoints/t2m/Comp_v6_KLD005/opt.txt'
 
-wrapper_opt = get_opt(dataset_opt_path, torch.device('cuda'))
-eval_wrapper = EvaluatorModelWrapper(wrapper_opt)
+# wrapper_opt = get_opt(dataset_opt_path, torch.device('cuda'))
+# eval_wrapper = EvaluatorModelWrapper(wrapper_opt)
 
 ##### ---- Network ---- #####
 clip_model, clip_preprocess = clip.load("ViT-B/32", device=torch.device('cuda'), jit=False)  # Must set jit=False for training
@@ -220,6 +220,12 @@ while nb_iter <= args.total_iter:
         nb_sample_train = 0
 
     if nb_iter % args.eval_iter ==  0:
+        # torch.save({'net' : net.state_dict()}, os.path.join(args.out_dir, 'net_last.pth'))
+        # torch.save({'net' : net.state_dict()}, os.path.join(args.out_dir, f'net_{nb_iter}.pth'))
+
+        torch.save({'trans' : trans_encoder.state_dict()}, os.path.join(args.out_dir, 'net_last.pth'))
+        torch.save({'trans' : trans_encoder.state_dict()}, os.path.join(args.out_dir, f'net_{nb_iter}.pth'))
+    
         best_fid, best_iter, best_div, best_top1, best_top2, best_top3, best_matching, writer, logger = eval_trans.evaluation_transformer(args.out_dir, val_loader, net, trans_encoder, logger, writer, nb_iter, best_fid, best_iter, best_div, best_top1, best_top2, best_top3, best_matching, clip_model=clip_model, eval_wrapper=eval_wrapper)
 
     if nb_iter == args.total_iter: 

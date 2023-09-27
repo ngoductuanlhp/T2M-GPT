@@ -27,7 +27,7 @@ def evaluation_vqvae(out_dir, val_loader, net, logger, writer, nb_iter, best_fid
     draw_text = []
 
 
-    motion_annotation_list = []
+    # motion_annotation_list = []
     motion_pred_list = []
 
     R_precision_real = 0
@@ -40,7 +40,7 @@ def evaluation_vqvae(out_dir, val_loader, net, logger, writer, nb_iter, best_fid
         word_embeddings, pos_one_hots, caption, sent_len, motion, m_length, token, name = batch
 
         motion = motion.cuda()
-        et, em = eval_wrapper.get_co_embeddings(word_embeddings, pos_one_hots, sent_len, motion, m_length)
+        # et, em = eval_wrapper.get_co_embeddings(word_embeddings, pos_one_hots, sent_len, motion, m_length)
         bs, seq = motion.shape[0], motion.shape[1]
 
         num_joints = 21 if motion.shape[-1] == 251 else 22
@@ -70,23 +70,23 @@ def evaluation_vqvae(out_dir, val_loader, net, logger, writer, nb_iter, best_fid
         et_pred, em_pred = eval_wrapper.get_co_embeddings(word_embeddings, pos_one_hots, sent_len, pred_pose_eval, m_length)
 
         motion_pred_list.append(em_pred)
-        motion_annotation_list.append(em)
+        # motion_annotation_list.append(em)
             
-        temp_R, temp_match = calculate_R_precision(et.cpu().numpy(), em.cpu().numpy(), top_k=3, sum_all=True)
-        R_precision_real += temp_R
-        matching_score_real += temp_match
-        temp_R, temp_match = calculate_R_precision(et_pred.cpu().numpy(), em_pred.cpu().numpy(), top_k=3, sum_all=True)
-        R_precision += temp_R
-        matching_score_pred += temp_match
+        # temp_R, temp_match = calculate_R_precision(et.cpu().numpy(), em.cpu().numpy(), top_k=3, sum_all=True)
+        # R_precision_real += temp_R
+        # matching_score_real += temp_match
+        # temp_R, temp_match = calculate_R_precision(et_pred.cpu().numpy(), em_pred.cpu().numpy(), top_k=3, sum_all=True)
+        # R_precision += temp_R
+        # matching_score_pred += temp_match
 
         nb_sample += bs
 
-    motion_annotation_np = torch.cat(motion_annotation_list, dim=0).cpu().numpy()
+    # motion_annotation_np = torch.cat(motion_annotation_list, dim=0).cpu().numpy()
     motion_pred_np = torch.cat(motion_pred_list, dim=0).cpu().numpy()
-    gt_mu, gt_cov  = calculate_activation_statistics(motion_annotation_np)
+    # gt_mu, gt_cov  = calculate_activation_statistics(motion_annotation_np)
     mu, cov= calculate_activation_statistics(motion_pred_np)
 
-    diversity_real = calculate_diversity(motion_annotation_np, 300 if nb_sample > 300 else 100)
+    # diversity_real = calculate_diversity(motion_annotation_np, 300 if nb_sample > 300 else 100)
     diversity = calculate_diversity(motion_pred_np, 300 if nb_sample > 300 else 100)
 
     R_precision_real = R_precision_real / nb_sample

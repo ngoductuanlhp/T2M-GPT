@@ -3,6 +3,8 @@ import scipy.ndimage.filters as filters
 
 class Skeleton(object):
     def __init__(self, offset, kinematic_tree, device):
+
+        # print(offset.shape)
         self.device = device
         self._raw_offset_np = offset.numpy()
         self._raw_offset = offset.clone().detach().to(device).float()
@@ -12,6 +14,7 @@ class Skeleton(object):
         self._parents[0] = -1
         for chain in self._kinematic_tree:
             for j in range(1, len(chain)):
+                # print(j, chain)
                 self._parents[chain[j]] = chain[j-1]
 
     def njoints(self):
@@ -190,7 +193,7 @@ class Skeleton(object):
                 matR = torch.matmul(matR, cont6d_to_matrix(cont6d_params[:, chain[i]]))
                 offset_vec = offsets[:, chain[i]].unsqueeze(-1)
                 # print(matR.shape, offset_vec.shape)
-                joints[:, chain[i]] = torch.matmul(matR, offset_vec).squeeze(-1) + joints[:, chain[i-1]]
+                joints[:, chain[i]] = torch.matmul(matR.float(), offset_vec.float()).squeeze(-1) + joints[:, chain[i-1]].float()
         return joints
 
 

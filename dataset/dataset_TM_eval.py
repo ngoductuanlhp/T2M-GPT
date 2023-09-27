@@ -9,6 +9,8 @@ from tqdm import tqdm
 import utils.paramUtil as paramUtil
 from torch.utils.data._utils.collate import default_collate
 
+from utils.motion_process import recover_from_rot, recover_root_rot_pos, quaternion_to_cont6d
+import os
 
 def collate_fn(batch):
     batch.sort(key=lambda x: x[3], reverse=True)
@@ -28,7 +30,7 @@ class Text2MotionDataset(data.Dataset):
         self.w_vectorizer = w_vectorizer
         if dataset_name == 't2m':
             self.data_root = './dataset/HumanML3D'
-            self.motion_dir = pjoin(self.data_root, 'new_joint_vecs')
+            self.motion_dir = pjoin(self.data_root, 'new_joint_vecs_rot6d')
             self.text_dir = pjoin(self.data_root, 'texts')
             self.joints_num = 22
             radius = 4
@@ -49,13 +51,18 @@ class Text2MotionDataset(data.Dataset):
             kinematic_chain = paramUtil.kit_kinematic_chain
             self.meta_dir = 'checkpoints/kit/VQVAEV3_CB1024_CMT_H1024_NRES3/meta'
 
-        mean = np.load(pjoin(self.meta_dir, 'mean.npy'))
-        std = np.load(pjoin(self.meta_dir, 'std.npy'))
+        # mean = np.load(pjoin(self.meta_dir, 'mean.npy'))
+        # std = np.load(pjoin(self.meta_dir, 'std.npy'))
+        mean = np.load(pjoin(self.data_root, 'Mean_rot6d.npy'))
+        std = np.load(pjoin(self.data_root, 'Std_rot6d.npy'))
+
         
         if is_test:
             split_file = pjoin(self.data_root, 'test.txt')
         else:
             split_file = pjoin(self.data_root, 'val.txt')
+
+        split_file = pjoin(self.data_root, 'train_small.txt')
 
         min_motion_len = 40 if self.dataset_name =='t2m' else 24
         # min_motion_len = 64
@@ -75,6 +82,9 @@ class Text2MotionDataset(data.Dataset):
                 motion = np.load(pjoin(self.motion_dir, name + '.npy'))
                 if (len(motion)) < min_motion_len or (len(motion) >= 200):
                     continue
+
+                # motion = self.preprocess(motion)
+
                 text_data = []
                 flag = False
                 with cs.open(pjoin(self.text_dir, name + '.txt')) as f:
@@ -140,6 +150,21 @@ class Text2MotionDataset(data.Dataset):
 
     def forward_transform(self, data):
         return (data - self.mean) / self.std
+    
+    def preprocess(self, data):
+        data = torch.from_numpy(data)
+        r_rot_quat, r_pos = recover_root_rot_pos(data)
+
+        r_rot_cont6d = quaternion_to_cont6d(r_rot_quat)
+
+        start_indx = 1 + 2 + 1 + (self.joints_num - 1) * 3
+        end_indx = start_indx + (self.joints_num - 1) * 6
+        cont6d_params = data[:, start_indx:end_indx]
+        #     print(r_rot_cont6d.shape, cont6d_params.shape, r_pos.shape)
+        cont6d_params = torch.cat([r_pos, r_rot_cont6d, cont6d_params], dim=-1)
+        # cont6d_params = cont6d_params.reshape(-1, self.joints_num, 6)
+        # print('after', cont6d_params.shape)
+        return cont6d_params.numpy()
 
     def __len__(self):
         return len(self.data_dict) - self.pointer
@@ -186,7 +211,7 @@ class Text2MotionDataset(data.Dataset):
         motion = motion[idx:idx+m_length]
 
         "Z Normalization"
-        motion = (motion - self.mean) / self.std
+        # motion = (motion - self.mean) / self.std
 
         if m_length < self.max_motion_length:
             motion = np.concatenate([motion,
