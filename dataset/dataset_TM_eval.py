@@ -147,6 +147,10 @@ class Text2MotionDataset(data.Dataset):
 
     def inv_transform(self, data):
         return data * self.std + self.mean
+    
+
+    def inv_transform_torch(self, data):
+        return data * torch.from_numpy(self.std).to(data.device) + torch.from_numpy(self.mean).to(data.device)
 
     def forward_transform(self, data):
         return (data - self.mean) / self.std
@@ -211,7 +215,7 @@ class Text2MotionDataset(data.Dataset):
         motion = motion[idx:idx+m_length]
 
         "Z Normalization"
-        # motion = (motion - self.mean) / self.std
+        motion = (motion - self.mean) / self.std
 
         if m_length < self.max_motion_length:
             motion = np.concatenate([motion,

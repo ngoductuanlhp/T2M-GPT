@@ -14,4 +14,4 @@ CUDA_VISIBLE_DEVICES=$1 python3 VQ_eval.py \
 --loss-vel 0.5 \
 --recons-loss l1_smooth \
 --exp-name TEST_VQVAE \
---resume-pth output/VQVAE_rot6d/net_last.pth
+--resume-pth output/VQVAE_rot6d_Znorm/net_75000.pth

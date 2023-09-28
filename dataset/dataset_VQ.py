@@ -52,7 +52,7 @@ class VQMotionDataset(data.Dataset):
             try:
                 motion = np.load(pjoin(self.motion_dir, name + '.npy'))
                 # motion = self.preprocess(motion)
-                np.save(pjoin(self.data_root, 'new_joint_vecs_rot6d', name + '.npy'), motion)
+                # np.save(pjoin(self.data_root, 'new_joint_vecs_rot6d', name + '.npy'), motion)
 
                 if motion.shape[0] < self.window_size:
                     continue
@@ -143,8 +143,8 @@ class VQMotionDataset(data.Dataset):
 
         motion = motion[idx:idx+self.window_size]
 
-        # "Z Normalization"
-        # motion = (motion - self.mean) / self.std
+        "Z Normalization"
+        motion = (motion - self.mean) / self.std
 
         return motion
 
