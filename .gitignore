@@ -156,3 +156,4 @@ T2M_render
 render_final_t2m.py
 
 results/
+dataset/Mixamo_rot6d

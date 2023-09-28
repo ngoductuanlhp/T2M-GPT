@@ -70,10 +70,23 @@ if args.resume_pth :
 net.train()
 net.cuda()
 
-skeleton = Skeleton(offset=torch.from_numpy(t2m_raw_offsets), 
-                    kinematic_tree=t2m_kinematic_chain,
-                    device='cuda')
-skeleton.set_offset(torch.from_numpy(t2m_raw_offsets))
+# skeleton = Skeleton(offset=torch.from_numpy(t2m_raw_offsets), 
+#                     kinematic_tree=t2m_kinematic_chain,
+#                     device='cuda')
+# skeleton.set_offset(torch.from_numpy(t2m_raw_offsets))
+file_dict = np.load('dataset/Mixamo_rot6d/Mousey_m/Box Turn.npz', allow_pickle=True)
+offsets = file_dict['offsets']
+kinematic_chains = file_dict['kinematic_chains']
+new_offsets = [[0,0,0]]
+for o in offsets:
+    new_offsets.append(o)
+offsets = new_offsets
+offsets = np.array(offsets)
+
+skeleton = Skeleton(offset=torch.from_numpy(offsets), 
+                        kinematic_tree=kinematic_chains,
+                        device='cuda')
+skeleton.set_offset(torch.from_numpy(offsets))
 
 # fid = []
 # div = []
@@ -85,13 +98,14 @@ skeleton.set_offset(torch.from_numpy(t2m_raw_offsets))
 
 mr_metric = MRMetrics(22, force_in_meter=False)
 for b,batch in tqdm(enumerate(val_loader)):
-    word_embeddings, pos_one_hots, caption, sent_len, motion, m_length, token, name = batch
+    # word_embeddings, pos_one_hots, caption, sent_len, motion, m_length, token, name = batch
+    motion, m_length, name = batch
 
     motion = motion.cuda()
     # et, em = eval_wrapper.get_co_embeddings(word_embeddings, pos_one_hots, sent_len, motion, m_length)
     bs, seq = motion.shape[0], motion.shape[1]
 
-    num_joints = 22
+    num_joints = 28
     
     pred_pose_eval = torch.zeros((bs, seq, motion.shape[-1])).cuda()
 
@@ -105,7 +119,9 @@ for b,batch in tqdm(enumerate(val_loader)):
         cont6d_params_pose = pose[..., 3:].view(-1, num_joints, 6)
         
         positions = skeleton.forward_kinematics_cont6d(cont6d_params_pose, r_pos_pose)
-        positions = positions.reshape(1, -1, 22, 3)
+        # positions = positions.reshape(1, -1, 22, 3)
+        positions = positions.reshape(1, -1, 28, 3)
+        positions = positions / 60.0
         # positions = positions / 6.0
         
         # pose_xyz = recover_from_ric(torch.from_numpy(pose).float().cuda(), num_joints)
@@ -118,12 +134,19 @@ for b,batch in tqdm(enumerate(val_loader)):
         cont6d_params_pred_pose = pred_pose[..., 3:].view(-1, num_joints, 6)
         # pred_denorm = val_loader.dataset.inv_transform(pred_pose.detach().cpu().numpy())
         pred_positions = skeleton.forward_kinematics_cont6d(cont6d_params_pred_pose, r_pos_pred_pose)
-        pred_positions = pred_positions.reshape(1, -1, 22, 3)
+        # pred_positions = pred_positions.reshape(1, -1, 22, 3)
+        pred_positions = pred_positions.reshape(1, -1, 28, 3)
+        pred_positions = pred_positions / 60.0
 
         mr_metric.update(pred_positions, positions, [m_length[i]])
         # self.MPJPE += torch.sum(
         #     calc_mpjpe(rst[i], ref[i], align_inds=align_inds))
         # self.PAMPJPE += torch.sum(calc_p
+
+        pose_vis = plot_3d.draw_to_batch(pred_positions.cpu().numpy(), name, [f'./results/vq_vae_mousey_m_freeze_train/{b}_pred.gif'], chain=kinematic_chains)
+        pose_vis = plot_3d.draw_to_batch(positions.cpu().numpy(), name, [f'./results/vq_vae_mousey_m_freeze_train/{b}_gt.gif'], chain=kinematic_chains)
+
+
 
 final_metric = mr_metric.compute(None)
 for k, v in final_metric.items():
@@ -131,10 +154,7 @@ for k, v in final_metric.items():
         # pred_positions = pred_positions /6.0
 
         # print('debug')
-        # pose_vis = plot_3d.draw_to_batch(pred_positions.cpu().numpy(), caption, [f'./results/vq_vae_rot6d/{b}_pred.gif'])
-        # pose_vis = plot_3d.draw_to_batch(positions.cpu().numpy(), caption, [f'./results/vq_vae_rot6d/{b}_gt.gif'])
-
-
+        
 #     best_fid, best_iter, best_div, best_top1, best_top2, best_top3, best_matching, writer, logger = eval_trans.evaluation_vqvae(args.out_dir, val_loader, net, logger, writer, 0, best_fid=1000, best_iter=0, best_div=100, best_top1=0, best_top2=0, best_top3=0, best_matching=100, eval_wrapper=eval_wrapper, draw=False, save=False, savenpy=(i==0))
 #     fid.append(best_fid)
 #     div.append(best_div)

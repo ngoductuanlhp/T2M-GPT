@@ -1,5 +1,5 @@
 CUDA_VISIBLE_DEVICES=$1 python3 VQ_eval.py \
---batch-size 256 \
+--batch-size 1 \
 --lr 2e-4 \
 --total-iter 300000 \
 --lr-scheduler 200000 \
@@ -8,10 +8,10 @@ CUDA_VISIBLE_DEVICES=$1 python3 VQ_eval.py \
 --depth 3 \
 --dilation-growth-rate 3 \
 --out-dir output \
---dataname t2m \
+--dataname mousey_m \
 --vq-act relu \
 --quantizer ema_reset \
 --loss-vel 0.5 \
 --recons-loss l1_smooth \
 --exp-name TEST_VQVAE \
---resume-pth output/VQVAE_rot6d/net_last.pth
+--resume-pth output/VQVAE_mousey_m_freeze_middle/net_10000.pth

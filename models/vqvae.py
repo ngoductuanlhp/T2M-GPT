@@ -24,8 +24,8 @@ class VQVAE_251(nn.Module):
 
 
 
-        self.encoder = Encoder(135, output_emb_width, down_t, stride_t, width, depth, dilation_growth_rate, activation=activation, norm=norm)
-        self.decoder = Decoder(135, output_emb_width, down_t, stride_t, width, depth, dilation_growth_rate, activation=activation, norm=norm)
+        self.encoder = Encoder(171, output_emb_width, down_t, stride_t, width, depth, dilation_growth_rate, activation=activation, norm=norm)
+        self.decoder = Decoder(171, output_emb_width, down_t, stride_t, width, depth, dilation_growth_rate, activation=activation, norm=norm)
         # self.encoder = Encoder(251 if args.dataname == 'kit' else 263, output_emb_width, down_t, stride_t, width, depth, dilation_growth_rate, activation=activation, norm=norm)
         # self.decoder = Decoder(251 if args.dataname == 'kit' else 263, output_emb_width, down_t, stride_t, width, depth, dilation_growth_rate, activation=activation, norm=norm)
         if args.quantizer == "ema_reset":
@@ -103,8 +103,35 @@ class HumanVQVAE(nn.Module):
         
         super().__init__()
         
-        self.nb_joints = 21 if args.dataname == 'kit' else 22
+        if args.dataname == 'kit':
+            self.nb_joints = 21
+        elif args.dataname == 't2m':
+            self.nb_joints = 22
+        elif args.dataname == 'mousey_m':
+            self.nb_joints = 28
+        else:
+            self.nb_joints = 22
+
         self.vqvae = VQVAE_251(args, nb_code, code_dim, output_emb_width, down_t, stride_t, width, depth, dilation_growth_rate, activation=activation, norm=norm)
+
+        # breakpoint()
+
+    def freeze_middle_model(self):
+        # self.vqvae.encoder.model[0]
+        self.vqvae.eval()
+        for p in self.vqvae.parameters():
+            p.requires_grad = False
+
+        for i in range(3):
+            self.vqvae.encoder.model[i].train()
+            for p in self.vqvae.encoder.model[i].parameters():
+                p.requires_grad = True
+        
+        for i in range(3):
+            self.vqvae.decoder.model[-1-i].train()
+            for p in self.vqvae.decoder.model[-1-i].parameters():
+                p.requires_grad = True
+
 
     def encode(self, x):
         b, t, c = x.size()

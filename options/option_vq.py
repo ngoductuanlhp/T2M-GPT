@@ -40,6 +40,7 @@ def get_args_parser():
     parser.add_argument('--beta', type=float, default=1.0, help='commitment loss in standard VQ')
 
     ## resume
+    parser.add_argument("--pretrain-pth", type=str, default=None, help='pretrain pth for VQ')
     parser.add_argument("--resume-pth", type=str, default=None, help='resume pth for VQ')
     parser.add_argument("--resume-gpt", type=str, default=None, help='resume pth for GPT')
     

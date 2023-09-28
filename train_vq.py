@@ -16,6 +16,7 @@ from models.evaluator_wrapper import EvaluatorModelWrapper
 import warnings
 warnings.filterwarnings('ignore')
 from utils.word_vectorizer import WordVectorizer
+from utils.load_ckpt import load_checkpoint
 
 def update_lr_warm_up(optimizer, nb_iter, warm_up_iter, lr):
 
@@ -63,10 +64,10 @@ train_loader = dataset_VQ.DATALoader(args.dataname,
 
 train_loader_iter = dataset_VQ.cycle(train_loader)
 
-val_loader = dataset_TM_eval.DATALoader(args.dataname, False,
-                                        32,
-                                        w_vectorizer,
-                                        unit_length=2**args.down_t)
+# val_loader = dataset_TM_eval.DATALoader(args.dataname, False,
+#                                         32,
+#                                         w_vectorizer,
+#                                         unit_length=2**args.down_t)
 
 ##### ---- Network ---- #####
 net = vqvae.HumanVQVAE(args, ## use args to define different parameters in different quantizers
@@ -86,8 +87,25 @@ if args.resume_pth :
     logger.info('loading checkpoint from {}'.format(args.resume_pth))
     ckpt = torch.load(args.resume_pth, map_location='cpu')
     net.load_state_dict(ckpt['net'], strict=True)
+
+if args.pretrain_pth : 
+    logger.info('loading pretrain checkpoint from {}'.format(args.resume_pth))
+    # ckpt = torch.load(args.pretrain_pth, map_location='cpu')
+    # net.load_state_dict(ckpt['net'], strict=False)
+    load_checkpoint(args.pretrain_pth, logger, net, strict=False)
 net.train()
+net.freeze_middle_model()
 net.cuda()
+
+
+total_params = 0
+trainable_params = 0
+for p in net.parameters():
+    total_params += p.numel()
+    if p.requires_grad:
+        trainable_params += p.numel()
+logger.info(f"Total params: {total_params}")
+logger.info(f"Trainable params: {trainable_params}")
 
 ##### ---- Optimizer & Scheduler ---- #####
 optimizer = optim.AdamW(net.parameters(), lr=args.lr, betas=(0.9, 0.99), weight_decay=args.weight_decay)
@@ -100,7 +118,7 @@ Loss = losses.ReConsLoss(args.recons_loss, args.nb_joints)
 avg_recons, avg_perplexity, avg_commit = 0., 0., 0.
 
 for nb_iter in range(1, args.warm_up_iter):
-    
+    # print(nb_iter)
     optimizer, current_lr = update_lr_warm_up(optimizer, nb_iter, args.warm_up_iter, args.lr)
     
     gt_motion = next(train_loader_iter)

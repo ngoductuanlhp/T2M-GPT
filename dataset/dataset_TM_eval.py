@@ -13,7 +13,7 @@ from utils.motion_process import recover_from_rot, recover_root_rot_pos, quatern
 import os
 
 def collate_fn(batch):
-    batch.sort(key=lambda x: x[3], reverse=True)
+    # batch.sort(key=lambda x: x[3], reverse=True)
     return default_collate(batch)
 
 
@@ -50,22 +50,31 @@ class Text2MotionDataset(data.Dataset):
             self.max_motion_length = 196
             kinematic_chain = paramUtil.kit_kinematic_chain
             self.meta_dir = 'checkpoints/kit/VQVAEV3_CB1024_CMT_H1024_NRES3/meta'
+        
+        elif dataset_name == 'mousey_m':
+            self.data_root = './dataset/Mixamo_rot6d'
+            self.motion_dir = pjoin(self.data_root, 'Mousey_m')
+            # self.text_dir = pjoin(self.data_root, 'texts')
+            self.joints_num = 28
 
+            self.max_motion_length = 196
+            self.meta_dir = 'checkpoints/kit/VQVAEV3_CB1024_CMT_H1024_NRES3/meta'
+        
         # mean = np.load(pjoin(self.meta_dir, 'mean.npy'))
         # std = np.load(pjoin(self.meta_dir, 'std.npy'))
-        mean = np.load(pjoin(self.data_root, 'Mean_rot6d.npy'))
-        std = np.load(pjoin(self.data_root, 'Std_rot6d.npy'))
+        # mean = np.load(pjoin(self.data_root, 'Mean_rot6d.npy'))
+        # std = np.load(pjoin(self.data_root, 'Std_rot6d.npy'))
 
         
-        if is_test:
-            split_file = pjoin(self.data_root, 'test.txt')
-        else:
-            split_file = pjoin(self.data_root, 'val.txt')
+        # if is_test:
+        #     split_file = pjoin(self.data_root, 'test.txt')
+        # else:
+        #     split_file = pjoin(self.data_root, 'val.txt')
 
         split_file = pjoin(self.data_root, 'train_small.txt')
 
-        min_motion_len = 40 if self.dataset_name =='t2m' else 24
-        # min_motion_len = 64
+        # min_motion_len = 40 if self.dataset_name =='t2m' else 24
+        min_motion_len = 16
 
         joints_num = self.joints_num
 
@@ -79,61 +88,68 @@ class Text2MotionDataset(data.Dataset):
         length_list = []
         for name in tqdm(id_list):
             try:
-                motion = np.load(pjoin(self.motion_dir, name + '.npy'))
+                file_dict = np.load(pjoin(self.motion_dir, name), allow_pickle=True)
+                # offsets = file_dict['offsets']
+                # kinematic_chains = file_dict['kinematic_chains']
+                positions = file_dict['positions']
+                rotations_6d = file_dict['rotations_6d'].reshape(file_dict['rotations_6d'].shape[0],-1)
+                motion = np.concatenate([positions, rotations_6d], axis=-1)
+
                 if (len(motion)) < min_motion_len or (len(motion) >= 200):
                     continue
 
                 # motion = self.preprocess(motion)
 
-                text_data = []
+                # text_data = []
                 flag = False
-                with cs.open(pjoin(self.text_dir, name + '.txt')) as f:
-                    for line in f.readlines():
-                        text_dict = {}
-                        line_split = line.strip().split('#')
-                        caption = line_split[0]
-                        tokens = line_split[1].split(' ')
-                        f_tag = float(line_split[2])
-                        to_tag = float(line_split[3])
-                        f_tag = 0.0 if np.isnan(f_tag) else f_tag
-                        to_tag = 0.0 if np.isnan(to_tag) else to_tag
+                # with cs.open(pjoin(self.text_dir, name + '.txt')) as f:
+                #     for line in f.readlines():
+                #         text_dict = {}
+                #         line_split = line.strip().split('#')
+                #         caption = line_split[0]
+                #         tokens = line_split[1].split(' ')
+                #         f_tag = float(line_split[2])
+                #         to_tag = float(line_split[3])
+                #         f_tag = 0.0 if np.isnan(f_tag) else f_tag
+                #         to_tag = 0.0 if np.isnan(to_tag) else to_tag
 
-                        text_dict['caption'] = caption
-                        text_dict['tokens'] = tokens
-                        if f_tag == 0.0 and to_tag == 0.0:
-                            flag = True
-                            text_data.append(text_dict)
-                        else:
-                            try:
-                                n_motion = motion[int(f_tag*fps) : int(to_tag*fps)]
-                                if (len(n_motion)) < min_motion_len or (len(n_motion) >= 200):
-                                    continue
-                                new_name = random.choice('ABCDEFGHIJKLMNOPQRSTUVW') + '_' + name
-                                while new_name in data_dict:
-                                    new_name = random.choice('ABCDEFGHIJKLMNOPQRSTUVW') + '_' + name
-                                data_dict[new_name] = {'motion': n_motion,
-                                                       'length': len(n_motion),
-                                                       'text':[text_dict]}
-                                new_name_list.append(new_name)
-                                length_list.append(len(n_motion))
-                            except:
-                                print(line_split)
-                                print(line_split[2], line_split[3], f_tag, to_tag, name)
-                                # break
+                #         text_dict['caption'] = caption
+                #         text_dict['tokens'] = tokens
+                #         if f_tag == 0.0 and to_tag == 0.0:
+                #             flag = True
+                #             text_data.append(text_dict)
+                #         else:
+                #             try:
+                #                 n_motion = motion[int(f_tag*fps) : int(to_tag*fps)]
+                #                 if (len(n_motion)) < min_motion_len or (len(n_motion) >= 200):
+                #                     continue
+                #                 new_name = random.choice('ABCDEFGHIJKLMNOPQRSTUVW') + '_' + name
+                #                 while new_name in data_dict:
+                #                     new_name = random.choice('ABCDEFGHIJKLMNOPQRSTUVW') + '_' + name
+                #                 data_dict[new_name] = {'motion': n_motion,
+                #                                        'length': len(n_motion),
+                #                                        'text':[text_dict]}
+                #                 new_name_list.append(new_name)
+                #                 length_list.append(len(n_motion))
+                #             except:
+                #                 print(line_split)
+                #                 print(line_split[2], line_split[3], f_tag, to_tag, name)
+                #                 # break
 
-                if flag:
-                    data_dict[name] = {'motion': motion,
-                                       'length': len(motion),
-                                       'text': text_data}
-                    new_name_list.append(name)
-                    length_list.append(len(motion))
+                # if flag:
+                data_dict[name] = {'motion': motion,
+                                    'length': len(motion),
+                                #    'text': text_data
+                                    }
+                new_name_list.append(name)
+                length_list.append(len(motion))
             except Exception as e:
                 # print(e)
                 pass
 
         name_list, length_list = zip(*sorted(zip(new_name_list, length_list), key=lambda x: x[1]))
-        self.mean = mean
-        self.std = std
+        # self.mean = mean
+        # self.std = std
         self.length_arr = np.array(length_list)
         self.data_dict = data_dict
         self.name_list = name_list
@@ -168,35 +184,35 @@ class Text2MotionDataset(data.Dataset):
 
     def __len__(self):
         return len(self.data_dict) - self.pointer
-
+    
     def __getitem__(self, item):
         idx = self.pointer + item
         name = self.name_list[idx]
         data = self.data_dict[name]
         # data = self.data_dict[self.name_list[idx]]
-        motion, m_length, text_list = data['motion'], data['length'], data['text']
+        motion, m_length = data['motion'], data['length']
         # Randomly select a caption
-        text_data = random.choice(text_list)
-        caption, tokens = text_data['caption'], text_data['tokens']
+        # text_data = random.choice(text_list)
+        # caption, tokens = text_data['caption'], text_data['tokens']
 
-        if len(tokens) < self.max_text_len:
-            # pad with "unk"
-            tokens = ['sos/OTHER'] + tokens + ['eos/OTHER']
-            sent_len = len(tokens)
-            tokens = tokens + ['unk/OTHER'] * (self.max_text_len + 2 - sent_len)
-        else:
-            # crop
-            tokens = tokens[:self.max_text_len]
-            tokens = ['sos/OTHER'] + tokens + ['eos/OTHER']
-            sent_len = len(tokens)
-        pos_one_hots = []
-        word_embeddings = []
-        for token in tokens:
-            word_emb, pos_oh = self.w_vectorizer[token]
-            pos_one_hots.append(pos_oh[None, :])
-            word_embeddings.append(word_emb[None, :])
-        pos_one_hots = np.concatenate(pos_one_hots, axis=0)
-        word_embeddings = np.concatenate(word_embeddings, axis=0)
+        # if len(tokens) < self.max_text_len:
+        #     # pad with "unk"
+        #     tokens = ['sos/OTHER'] + tokens + ['eos/OTHER']
+        #     sent_len = len(tokens)
+        #     tokens = tokens + ['unk/OTHER'] * (self.max_text_len + 2 - sent_len)
+        # else:
+        #     # crop
+        #     tokens = tokens[:self.max_text_len]
+        #     tokens = ['sos/OTHER'] + tokens + ['eos/OTHER']
+        #     sent_len = len(tokens)
+        # pos_one_hots = []
+        # word_embeddings = []
+        # for token in tokens:
+        #     word_emb, pos_oh = self.w_vectorizer[token]
+        #     pos_one_hots.append(pos_oh[None, :])
+        #     word_embeddings.append(word_emb[None, :])
+        # pos_one_hots = np.concatenate(pos_one_hots, axis=0)
+        # word_embeddings = np.concatenate(word_embeddings, axis=0)
 
         if self.unit_length < 10:
             coin2 = np.random.choice(['single', 'single', 'double'])
@@ -217,8 +233,61 @@ class Text2MotionDataset(data.Dataset):
             motion = np.concatenate([motion,
                                      np.zeros((self.max_motion_length - m_length, motion.shape[1]))
                                      ], axis=0)
+        return motion, m_length, name
+        # return word_embeddings, pos_one_hots, caption, sent_len, motion, m_length, '_'.join(tokens), name
 
-        return word_embeddings, pos_one_hots, caption, sent_len, motion, m_length, '_'.join(tokens), name
+
+
+    # def __getitem__(self, item):
+    #     idx = self.pointer + item
+    #     name = self.name_list[idx]
+    #     data = self.data_dict[name]
+    #     # data = self.data_dict[self.name_list[idx]]
+    #     motion, m_length, text_list = data['motion'], data['length'], data['text']
+    #     # Randomly select a caption
+    #     text_data = random.choice(text_list)
+    #     caption, tokens = text_data['caption'], text_data['tokens']
+
+    #     if len(tokens) < self.max_text_len:
+    #         # pad with "unk"
+    #         tokens = ['sos/OTHER'] + tokens + ['eos/OTHER']
+    #         sent_len = len(tokens)
+    #         tokens = tokens + ['unk/OTHER'] * (self.max_text_len + 2 - sent_len)
+    #     else:
+    #         # crop
+    #         tokens = tokens[:self.max_text_len]
+    #         tokens = ['sos/OTHER'] + tokens + ['eos/OTHER']
+    #         sent_len = len(tokens)
+    #     pos_one_hots = []
+    #     word_embeddings = []
+    #     for token in tokens:
+    #         word_emb, pos_oh = self.w_vectorizer[token]
+    #         pos_one_hots.append(pos_oh[None, :])
+    #         word_embeddings.append(word_emb[None, :])
+    #     pos_one_hots = np.concatenate(pos_one_hots, axis=0)
+    #     word_embeddings = np.concatenate(word_embeddings, axis=0)
+
+    #     if self.unit_length < 10:
+    #         coin2 = np.random.choice(['single', 'single', 'double'])
+    #     else:
+    #         coin2 = 'single'
+
+    #     if coin2 == 'double':
+    #         m_length = (m_length // self.unit_length - 1) * self.unit_length
+    #     elif coin2 == 'single':
+    #         m_length = (m_length // self.unit_length) * self.unit_length
+    #     idx = random.randint(0, len(motion) - m_length)
+    #     motion = motion[idx:idx+m_length]
+
+    #     "Z Normalization"
+    #     # motion = (motion - self.mean) / self.std
+
+    #     if m_length < self.max_motion_length:
+    #         motion = np.concatenate([motion,
+    #                                  np.zeros((self.max_motion_length - m_length, motion.shape[1]))
+    #                                  ], axis=0)
+
+    #     return word_embeddings, pos_one_hots, caption, sent_len, motion, m_length, '_'.join(tokens), name
 
 
 

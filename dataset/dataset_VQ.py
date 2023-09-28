@@ -30,14 +30,23 @@ class VQMotionDataset(data.Dataset):
 
             self.max_motion_length = 196
             self.meta_dir = 'checkpoints/kit/VQVAEV3_CB1024_CMT_H1024_NRES3/meta'
+
+        elif dataset_name == 'mousey_m':
+            self.data_root = './dataset/Mixamo_rot6d'
+            self.motion_dir = pjoin(self.data_root, 'Mousey_m')
+            # self.text_dir = pjoin(self.data_root, 'texts')
+            self.joints_num = 28
+
+            self.max_motion_length = 196
+            self.meta_dir = 'checkpoints/kit/VQVAEV3_CB1024_CMT_H1024_NRES3/meta'
         
         joints_num = self.joints_num
 
         # if not os.path.exists(pjoin(self.motion_dir, 'mean_rot6d.npy')):
         #     self.mean_variance(self.motion_dir, self.motion_dir, self.joints_num)
 
-        mean = np.load(pjoin(self.data_root, 'Mean_rot6d.npy'))
-        std = np.load(pjoin(self.data_root, 'Std_rot6d.npy'))
+        # mean = np.load(pjoin(self.data_root, 'Mean_rot6d.npy'))
+        # std = np.load(pjoin(self.data_root, 'Std_rot6d.npy'))
 
         split_file = pjoin(self.data_root, 'train.txt')
 
@@ -50,9 +59,15 @@ class VQMotionDataset(data.Dataset):
 
         for name in tqdm(id_list):
             try:
-                motion = np.load(pjoin(self.motion_dir, name + '.npy'))
+                file_dict = np.load(pjoin(self.motion_dir, name), allow_pickle=True)
+                offsets = file_dict['offsets']
+                kinematic_chains = file_dict['kinematic_chains']
+                positions = file_dict['positions']
+                rotations_6d = file_dict['rotations_6d'].reshape(file_dict['rotations_6d'].shape[0],-1)
+                motion = np.concatenate([positions, rotations_6d], axis=-1)
+
                 # motion = self.preprocess(motion)
-                np.save(pjoin(self.data_root, 'new_joint_vecs_rot6d', name + '.npy'), motion)
+                # np.save(pjoin(self.data_root, 'new_joint_vecs_rot6d', name + '.npy'), motion)
 
                 if motion.shape[0] < self.window_size:
                     continue
@@ -64,9 +79,9 @@ class VQMotionDataset(data.Dataset):
             except:
                 # Some motion may not exist in KIT dataset
                 pass
-
-        self.mean = mean
-        self.std = std
+        # breakpoint()
+        # self.mean = mean
+        # self.std = std
         print("Total number of motions {}".format(len(self.data)))
 
     def inv_transform(self, data):
@@ -156,7 +171,8 @@ def DATALoader(dataset_name,
     
     trainSet = VQMotionDataset(dataset_name, window_size=window_size, unit_length=unit_length)
     prob = trainSet.compute_sampling_prob()
-    sampler = torch.utils.data.WeightedRandomSampler(prob, num_samples = len(trainSet) * 1000, replacement=True)
+    # print(len(trainSet))
+    # sampler = torch.utils.data.WeightedRandomSampler(prob, num_samples = len(trainSet) * 1000, replacement=True)
     train_loader = torch.utils.data.DataLoader(trainSet,
                                               batch_size,
                                               shuffle=True,
