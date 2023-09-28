@@ -36,8 +36,8 @@ class VQMotionDataset(data.Dataset):
         # if not os.path.exists(pjoin(self.motion_dir, 'mean_rot6d.npy')):
         #     self.mean_variance(self.motion_dir, self.motion_dir, self.joints_num)
 
-        mean = np.load(pjoin(self.data_root, 'Mean_rot6d.npy'))
-        std = np.load(pjoin(self.data_root, 'Std_rot6d.npy'))
+        mean = np.load(pjoin(self.data_root, 'Mean.npy'))[..., :(self.joints_num - 1) * 3 + 4]
+        std = np.load(pjoin(self.data_root, 'Std.npy'))[..., :(self.joints_num - 1) * 3 + 4]
 
         split_file = pjoin(self.data_root, 'train.txt')
 
@@ -52,7 +52,7 @@ class VQMotionDataset(data.Dataset):
             try:
                 motion = np.load(pjoin(self.motion_dir, name + '.npy'))
                 # motion = self.preprocess(motion)
-                np.save(pjoin(self.data_root, 'new_joint_vecs_rot6d', name + '.npy'), motion)
+                # np.save(pjoin(self.data_root, 'new_joint_vecs', name + '.npy'), motion)
 
                 if motion.shape[0] < self.window_size:
                     continue
@@ -115,24 +115,26 @@ class VQMotionDataset(data.Dataset):
 
         return Mean, Std
     
-    def preprocess(self, data):
-        data = torch.from_numpy(data)
-        r_rot_quat, r_pos = recover_root_rot_pos(data)
+    # def preprocess(self, data):
+    #     data = torch.from_numpy(data)
+    #     r_rot_quat, r_pos = recover_root_rot_pos(data)
+    #     positions = data[..., :(self.joints_num - 1) * 3 + 4]
 
-        r_rot_cont6d = quaternion_to_cont6d(r_rot_quat)
+    #     # r_rot_cont6d = quaternion_to_cont6d(r_rot_quat)
 
-        start_indx = 1 + 2 + 1 + (self.joints_num - 1) * 3
-        end_indx = start_indx + (self.joints_num - 1) * 6
-        cont6d_params = data[:, start_indx:end_indx]
-        #     print(r_rot_cont6d.shape, cont6d_params.shape, r_pos.shape)
-        cont6d_params = torch.cat([r_pos, r_rot_cont6d, cont6d_params], dim=-1)
-        # cont6d_params = cont6d_params.reshape(-1, self.joints_num, 6)
-        # print('after', cont6d_params.shape)
-        return cont6d_params.numpy()
+    #     # start_indx = 1 + 2 + 1 + (self.joints_num - 1) * 3
+    #     # end_indx = start_indx + (self.joints_num - 1) * 6
+    #     # cont6d_params = data[:, start_indx:end_indx]
+    #     # #     print(r_rot_cont6d.shape, cont6d_params.shape, r_pos.shape)
+    #     # cont6d_params = torch.cat([r_pos, r_rot_cont6d, cont6d_params], dim=-1)
+    #     # cont6d_params = cont6d_params.reshape(-1, self.joints_num, 6)
+    #     # print('after', cont6d_params.shape)
+    #     return cont6d_params.numpy()
 
 
     def __getitem__(self, item):
         motion = self.data[item]
+        motion = motion[..., :(self.joints_num - 1) * 3 + 4]
 
         # motion = motion[:, ]
         # print('before', motion.shape)
@@ -143,8 +145,8 @@ class VQMotionDataset(data.Dataset):
 
         motion = motion[idx:idx+self.window_size]
 
-        # "Z Normalization"
-        # motion = (motion - self.mean) / self.std
+        "Z Normalization"
+        motion = (motion - self.mean) / self.std
 
         return motion
 

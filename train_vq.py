@@ -63,10 +63,10 @@ train_loader = dataset_VQ.DATALoader(args.dataname,
 
 train_loader_iter = dataset_VQ.cycle(train_loader)
 
-val_loader = dataset_TM_eval.DATALoader(args.dataname, False,
-                                        32,
-                                        w_vectorizer,
-                                        unit_length=2**args.down_t)
+# val_loader = dataset_TM_eval.DATALoader(args.dataname, False,
+#                                         32,
+#                                         w_vectorizer,
+#                                         unit_length=2**args.down_t)
 
 ##### ---- Network ---- #####
 net = vqvae.HumanVQVAE(args, ## use args to define different parameters in different quantizers
