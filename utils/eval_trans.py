@@ -6,8 +6,11 @@ import torch
 from scipy import linalg
 
 import visualization.plot_3d_global as plot_3d
-from utils.motion_process import recover_from_ric
+from utils.motion_process import recover_from_ric, recover_from_rot
 from tqdm import tqdm
+
+
+
 
 def tensorborad_add_video_xyz(writer, xyz, nb_iter, tag, nb_vis=4, title_batch=None, outname=None):
     xyz = xyz[:1]
@@ -50,7 +53,9 @@ def evaluation_vqvae(out_dir, val_loader, net, logger, writer, nb_iter, best_fid
         for i in range(bs):
             pose = val_loader.dataset.inv_transform(motion[i:i+1, :m_length[i], :].detach().cpu().numpy())
             pose_xyz = recover_from_ric(torch.from_numpy(pose).float().cuda(), num_joints)
-
+            # pose_xyz = recover_from_rot(torch.from_numpy(pose).float().cuda(), num_joints, skeleton)
+            # pose_xyz = pose_xyz.reshape(1, -1, 22, 3)
+            # pose_xyz = pose_xyz / 6.0
 
             pred_pose, loss_commit, perplexity = net(motion[i:i+1, :m_length[i]])
             pred_denorm = val_loader.dataset.inv_transform(pred_pose.detach().cpu().numpy())
