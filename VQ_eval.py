@@ -14,7 +14,7 @@ from models.evaluator_wrapper import EvaluatorModelWrapper
 import warnings
 warnings.filterwarnings('ignore')
 import numpy as np
-from utils.motion_process import recover_from_rot, recover_root_rot_pos, quaternion_to_cont6d
+from utils.motion_process import recover_from_ric, recover_from_rot, recover_root_rot_pos, quaternion_to_cont6d
 
 from utils.skeleton import Skeleton
 from utils.paramUtil import *
@@ -100,40 +100,44 @@ for b,batch in tqdm(enumerate(val_loader)):
         # pose = val_loader.dataset.inv_transform(motion[i:i+1, :m_length[i], :].detach().cpu().numpy())
         pose = motion[i:i+1, :m_length[i], :].detach()
 
-        # breakpoint()
-        r_pos_pose = pose[..., :3]
-        cont6d_params_pose = pose[..., 3:].view(-1, num_joints, 6)
+        # # breakpoint()
+        # r_pos_pose = pose[..., :3]
+        # cont6d_params_pose = pose[..., 3:].view(-1, num_joints, 6)
         
-        positions = skeleton.forward_kinematics_cont6d(cont6d_params_pose, r_pos_pose)
-        positions = positions.reshape(1, -1, 22, 3)
+        # positions = skeleton.forward_kinematics_cont6d(cont6d_params_pose, r_pos_pose)
+        # positions = positions.reshape(1, -1, 22, 3)
         # positions = positions / 6.0
-        
-        # pose_xyz = recover_from_ric(torch.from_numpy(pose).float().cuda(), num_joints)
+        pose = val_loader.dataset.inv_transform_torch(pose)
+
+        positions = recover_from_ric(pose.float(), num_joints)
 
         pred_pose, loss_commit, perplexity = net(motion[i:i+1, :m_length[i]])
         pred_pose = pred_pose.detach()
 
         # breakpoint()
-        r_pos_pred_pose = pred_pose[..., :3]
-        cont6d_params_pred_pose = pred_pose[..., 3:].view(-1, num_joints, 6)
-        # pred_denorm = val_loader.dataset.inv_transform(pred_pose.detach().cpu().numpy())
-        pred_positions = skeleton.forward_kinematics_cont6d(cont6d_params_pred_pose, r_pos_pred_pose)
-        pred_positions = pred_positions.reshape(1, -1, 22, 3)
+        # r_pos_pred_pose = pred_pose[..., :3]
+        # cont6d_params_pred_pose = pred_pose[..., 3:].view(-1, num_joints, 6)
+        pred_pose = val_loader.dataset.inv_transform_torch(pred_pose)
+        # pred_positions = skeleton.forward_kinematics_cont6d(cont6d_params_pred_pose, r_pos_pred_pose)
+        # pred_positions = pred_positions.reshape(1, -1, 22, 3)
+        pred_positions = recover_from_ric(pred_pose.float(), num_joints)
 
         mr_metric.update(pred_positions, positions, [m_length[i]])
         # self.MPJPE += torch.sum(
         #     calc_mpjpe(rst[i], ref[i], align_inds=align_inds))
         # self.PAMPJPE += torch.sum(calc_p
 
+        # print('debug')
+        pose_vis = plot_3d.draw_to_batch(pred_positions.cpu().numpy(), caption, [f'./results/vq_vae_loc3d/{b}_pred.gif'])
+        pose_vis = plot_3d.draw_to_batch(positions.cpu().numpy(), caption, [f'./results/vq_vae_loc3d/{b}_gt.gif'])
+
+
 final_metric = mr_metric.compute(None)
 for k, v in final_metric.items():
     print(f'Metric {k}: {v}')
         # pred_positions = pred_positions /6.0
 
-        # print('debug')
-        # pose_vis = plot_3d.draw_to_batch(pred_positions.cpu().numpy(), caption, [f'./results/vq_vae_rot6d/{b}_pred.gif'])
-        # pose_vis = plot_3d.draw_to_batch(positions.cpu().numpy(), caption, [f'./results/vq_vae_rot6d/{b}_gt.gif'])
-
+        
 
 #     best_fid, best_iter, best_div, best_top1, best_top2, best_top3, best_matching, writer, logger = eval_trans.evaluation_vqvae(args.out_dir, val_loader, net, logger, writer, 0, best_fid=1000, best_iter=0, best_div=100, best_top1=0, best_top2=0, best_top3=0, best_matching=100, eval_wrapper=eval_wrapper, draw=False, save=False, savenpy=(i==0))
 #     fid.append(best_fid)

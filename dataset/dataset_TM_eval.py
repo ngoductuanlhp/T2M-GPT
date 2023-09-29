@@ -30,7 +30,7 @@ class Text2MotionDataset(data.Dataset):
         self.w_vectorizer = w_vectorizer
         if dataset_name == 't2m':
             self.data_root = './dataset/HumanML3D'
-            self.motion_dir = pjoin(self.data_root, 'new_joint_vecs_rot6d')
+            self.motion_dir = pjoin(self.data_root, 'new_joint_vecs')
             self.text_dir = pjoin(self.data_root, 'texts')
             self.joints_num = 22
             radius = 4
@@ -53,8 +53,8 @@ class Text2MotionDataset(data.Dataset):
 
         # mean = np.load(pjoin(self.meta_dir, 'mean.npy'))
         # std = np.load(pjoin(self.meta_dir, 'std.npy'))
-        mean = np.load(pjoin(self.data_root, 'Mean_rot6d.npy'))
-        std = np.load(pjoin(self.data_root, 'Std_rot6d.npy'))
+        mean = np.load(pjoin(self.data_root, 'Mean.npy'))[..., :(self.joints_num - 1) * 3 + 4]
+        std = np.load(pjoin(self.data_root, 'Std.npy'))[..., :(self.joints_num - 1) * 3 + 4]
 
         
         if is_test:
@@ -147,6 +147,10 @@ class Text2MotionDataset(data.Dataset):
 
     def inv_transform(self, data):
         return data * self.std + self.mean
+    
+    def inv_transform_torch(self, data):
+        d = data.device
+        return torch.from_numpy(self.inv_transform(data.cpu().numpy())).to(d)
 
     def forward_transform(self, data):
         return (data - self.mean) / self.std
@@ -175,6 +179,9 @@ class Text2MotionDataset(data.Dataset):
         data = self.data_dict[name]
         # data = self.data_dict[self.name_list[idx]]
         motion, m_length, text_list = data['motion'], data['length'], data['text']
+
+        motion = motion[..., :(self.joints_num - 1) * 3 + 4]
+
         # Randomly select a caption
         text_data = random.choice(text_list)
         caption, tokens = text_data['caption'], text_data['tokens']
@@ -211,7 +218,7 @@ class Text2MotionDataset(data.Dataset):
         motion = motion[idx:idx+m_length]
 
         "Z Normalization"
-        # motion = (motion - self.mean) / self.std
+        motion = (motion - self.mean) / self.std
 
         if m_length < self.max_motion_length:
             motion = np.concatenate([motion,

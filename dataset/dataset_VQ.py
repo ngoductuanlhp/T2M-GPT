@@ -16,7 +16,7 @@ class VQMotionDataset(data.Dataset):
 
         if dataset_name == 't2m':
             self.data_root = './dataset/HumanML3D'
-            self.motion_dir = pjoin(self.data_root, 'new_joint_vecs_rot6d')
+            self.motion_dir = pjoin(self.data_root, 'new_joint_vecs')
             self.text_dir = pjoin(self.data_root, 'texts')
             self.joints_num = 22
             self.max_motion_length = 196
@@ -49,21 +49,21 @@ class VQMotionDataset(data.Dataset):
                 id_list.append(line.strip())
 
         for name in tqdm(id_list):
-            try:
-                motion = np.load(pjoin(self.motion_dir, name + '.npy'))
-                # motion = self.preprocess(motion)
-                # np.save(pjoin(self.data_root, 'new_joint_vecs', name + '.npy'), motion)
+            # try:
+            motion = np.load(pjoin(self.motion_dir, name + '.npy'))
+            # motion = self.preprocess(motion)
+            # np.save(pjoin(self.data_root, 'new_joint_vecs', name + '.npy'), motion)
 
-                if motion.shape[0] < self.window_size:
-                    continue
+            if motion.shape[0] < self.window_size:
+                continue
 
-                self.lengths.append(motion.shape[0] - self.window_size)
-                self.data.append(motion)
+            self.lengths.append(motion.shape[0] - self.window_size)
+            self.data.append(motion)
 
                 # breakpoint()
-            except:
-                # Some motion may not exist in KIT dataset
-                pass
+            # except:
+            #     # Some motion may not exist in KIT dataset
+            #     pass
 
         self.mean = mean
         self.std = std
