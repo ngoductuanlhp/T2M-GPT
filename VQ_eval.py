@@ -70,10 +70,13 @@ if args.resume_pth :
 net.train()
 net.cuda()
 
-skeleton = Skeleton(offset=torch.from_numpy(t2m_raw_offsets), 
+
+t2m_raw_offsets_scaled = t2m_raw_offsets / 6.0
+
+skeleton = Skeleton(offset=torch.from_numpy(t2m_raw_offsets_scaled), 
                     kinematic_tree=t2m_kinematic_chain,
                     device='cuda')
-skeleton.set_offset(torch.from_numpy(t2m_raw_offsets))
+skeleton.set_offset(torch.from_numpy(t2m_raw_offsets_scaled))
 
 # fid = []
 # div = []
@@ -101,14 +104,16 @@ for b,batch in tqdm(enumerate(val_loader)):
         pose = motion[i:i+1, :m_length[i], :].detach()
         pose = val_loader.dataset.inv_transform_torch(pose)
 
+        positions = recover_from_rot(pose.float(), 22, skeleton)
         # breakpoint()
-        r_pos_pose = pose[..., :3]
-        cont6d_params_pose = pose[..., 3:].view(-1, num_joints, 6)
+        # r_pos_pose = pose[..., :3]
+        # cont6d_params_pose = pose[..., 3:].view(-1, num_joints, 6)
         
-        positions = skeleton.forward_kinematics_cont6d(cont6d_params_pose, r_pos_pose)
+        # positions = skeleton.forward_kinematics_cont6d(cont6d_params_pose, r_pos_pose)
+        # 
+        
         positions = positions.reshape(1, -1, 22, 3)
-        positions = positions / 6.0
-        
+
         # pose_xyz = recover_from_ric(torch.from_numpy(pose).float().cuda(), num_joints)
 
         pred_pose, loss_commit, perplexity = net(motion[i:i+1, :m_length[i]])
@@ -116,20 +121,22 @@ for b,batch in tqdm(enumerate(val_loader)):
         pred_pose = val_loader.dataset.inv_transform_torch(pred_pose)
 
         # breakpoint()
-        r_pos_pred_pose = pred_pose[..., :3]
-        cont6d_params_pred_pose = pred_pose[..., 3:].view(-1, num_joints, 6)
+        # r_pos_pred_pose = pred_pose[..., :3]
+        # cont6d_params_pred_pose = pred_pose[..., 3:].view(-1, num_joints, 6)
         
-        pred_positions = skeleton.forward_kinematics_cont6d(cont6d_params_pred_pose, r_pos_pred_pose)
+        # pred_positions = skeleton.forward_kinematics_cont6d(cont6d_params_pred_pose, r_pos_pred_pose)
+        
+        pred_positions = recover_from_rot(pred_pose.float(), 22, skeleton)
+        # pred_positions = pred_positions / 6.0
         pred_positions = pred_positions.reshape(1, -1, 22, 3)
-        pred_positions = pred_positions / 6.0
 
         mr_metric.update(pred_positions, positions, [m_length[i]])
         # self.MPJPE += torch.sum(
         #     calc_mpjpe(rst[i], ref[i], align_inds=align_inds))
         # self.PAMPJPE += torch.sum(calc_p
 
-        pose_vis = plot_3d.draw_to_batch(pred_positions.cpu().numpy(), caption, [f'./results/vq_vae_rot6d_Znorm/{b}_pred.gif'])
-        # pose_vis = plot_3d.draw_to_batch(positions.cpu().numpy(), caption, [f'./results/vq_vae_rot6d_Znorm/{b}_gt.gif'])
+        pose_vis = plot_3d.draw_to_batch(pred_positions.cpu().numpy(), caption, [f'./results/vq_vae_rot6d_new_Znorm/{b}_pred.gif'])
+        pose_vis = plot_3d.draw_to_batch(positions.cpu().numpy(), caption, [f'./results/vq_vae_rot6d_new_Znorm/{b}_gt.gif'])
 
 
 final_metric = mr_metric.compute(None)

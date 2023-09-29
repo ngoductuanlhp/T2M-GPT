@@ -16,7 +16,7 @@ class VQMotionDataset(data.Dataset):
 
         if dataset_name == 't2m':
             self.data_root = './dataset/HumanML3D'
-            self.motion_dir = pjoin(self.data_root, 'new_joint_vecs_rot6d')
+            self.motion_dir = pjoin(self.data_root, 'new_joint_vecs')
             self.text_dir = pjoin(self.data_root, 'texts')
             self.joints_num = 22
             self.max_motion_length = 196
@@ -33,11 +33,17 @@ class VQMotionDataset(data.Dataset):
         
         joints_num = self.joints_num
 
+        self.start_ind = 1 + 2 + 1 + (joints_num - 1) * 3
+        self.end_ind = self.start_ind + (joints_num - 1) * 6
+
         # if not os.path.exists(pjoin(self.motion_dir, 'mean_rot6d.npy')):
         #     self.mean_variance(self.motion_dir, self.motion_dir, self.joints_num)
 
-        mean = np.load(pjoin(self.data_root, 'Mean_rot6d.npy'))
-        std = np.load(pjoin(self.data_root, 'Std_rot6d.npy'))
+        mean = np.load(pjoin(self.data_root, 'Mean.npy'))
+        mean = np.concatenate([mean[:4], mean[self.start_ind:self.end_ind]], axis=-1)
+
+        std = np.load(pjoin(self.data_root, 'Std.npy'))
+        std = np.concatenate([std[:4], std[self.start_ind:self.end_ind]], axis=-1)
 
         split_file = pjoin(self.data_root, 'train.txt')
 
@@ -51,6 +57,8 @@ class VQMotionDataset(data.Dataset):
         for name in tqdm(id_list):
             try:
                 motion = np.load(pjoin(self.motion_dir, name + '.npy'))
+                motion = np.concatenate([motion[:, :4], motion[:, self.start_ind:self.end_ind]], axis=-1)
+
                 # motion = self.preprocess(motion)
                 # np.save(pjoin(self.data_root, 'new_joint_vecs_rot6d', name + '.npy'), motion)
 

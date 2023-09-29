@@ -30,7 +30,7 @@ class Text2MotionDataset(data.Dataset):
         self.w_vectorizer = w_vectorizer
         if dataset_name == 't2m':
             self.data_root = './dataset/HumanML3D'
-            self.motion_dir = pjoin(self.data_root, 'new_joint_vecs_rot6d')
+            self.motion_dir = pjoin(self.data_root, 'new_joint_vecs')
             self.text_dir = pjoin(self.data_root, 'texts')
             self.joints_num = 22
             radius = 4
@@ -51,10 +51,19 @@ class Text2MotionDataset(data.Dataset):
             kinematic_chain = paramUtil.kit_kinematic_chain
             self.meta_dir = 'checkpoints/kit/VQVAEV3_CB1024_CMT_H1024_NRES3/meta'
 
+
+        joints_num = self.joints_num
+        self.start_ind = 1 + 2 + 1 + (joints_num - 1) * 3
+        self.end_ind = self.start_ind + (joints_num - 1) * 6
         # mean = np.load(pjoin(self.meta_dir, 'mean.npy'))
         # std = np.load(pjoin(self.meta_dir, 'std.npy'))
-        mean = np.load(pjoin(self.data_root, 'Mean_rot6d.npy'))
-        std = np.load(pjoin(self.data_root, 'Std_rot6d.npy'))
+        # mean = np.load(pjoin(self.data_root, 'Mean_rot6d.npy'))
+        # std = np.load(pjoin(self.data_root, 'Std_rot6d.npy'))
+        mean = np.load(pjoin(self.data_root, 'Mean.npy'))
+        mean = np.concatenate([mean[:4], mean[self.start_ind:self.end_ind]], axis=-1)
+
+        std = np.load(pjoin(self.data_root, 'Std.npy'))
+        std = np.concatenate([std[:4], std[self.start_ind:self.end_ind]], axis=-1)
 
         
         if is_test:
@@ -67,7 +76,6 @@ class Text2MotionDataset(data.Dataset):
         min_motion_len = 40 if self.dataset_name =='t2m' else 24
         # min_motion_len = 64
 
-        joints_num = self.joints_num
 
         data_dict = {}
         id_list = []
@@ -80,6 +88,8 @@ class Text2MotionDataset(data.Dataset):
         for name in tqdm(id_list):
             try:
                 motion = np.load(pjoin(self.motion_dir, name + '.npy'))
+                motion = np.concatenate([motion[:, :4], motion[:, self.start_ind:self.end_ind]], axis=-1)
+
                 if (len(motion)) < min_motion_len or (len(motion) >= 200):
                     continue
 

@@ -13,5 +13,5 @@ CUDA_VISIBLE_DEVICES=$1 python3 train_vq.py \
 --quantizer ema_reset \
 --loss-vel 0.5 \
 --recons-loss l1_smooth \
---exp-name VQVAE_rot6d_Znorm
+--exp-name VQVAE_rot6d_new_Znorm
 # --resume-pth output/VQVAE/net_best_fid.pth

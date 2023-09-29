@@ -28,9 +28,10 @@ def recover_from_rot(data, joints_num, skeleton):
 
     r_rot_cont6d = quaternion_to_cont6d(r_rot_quat)
 
-    start_indx = 1 + 2 + 1 + (joints_num - 1) * 3
-    end_indx = start_indx + (joints_num - 1) * 6
-    cont6d_params = data[..., start_indx:end_indx]
+    # start_indx = 1 + 2 + 1 + (joints_num - 1) * 3
+    # end_indx = start_indx + (joints_num - 1) * 6
+    # cont6d_params = data[..., start_indx:end_indx]
+    cont6d_params = data[..., 4:]
     #     print(r_rot_cont6d.shape, cont6d_params.shape, r_pos.shape)
     cont6d_params = torch.cat([r_rot_cont6d, cont6d_params], dim=-1)
     cont6d_params = cont6d_params.view(-1, joints_num, 6)
