@@ -128,8 +128,8 @@ for b,batch in tqdm(enumerate(val_loader)):
         # self.PAMPJPE += torch.sum(calc_p
 
         # print('debug')
-        pose_vis = plot_3d.draw_to_batch(pred_positions.cpu().numpy(), caption, [f'./results/vq_vae_loc3d/{b}_pred.gif'])
-        pose_vis = plot_3d.draw_to_batch(positions.cpu().numpy(), caption, [f'./results/vq_vae_loc3d/{b}_gt.gif'])
+        pose_vis = plot_3d.draw_to_batch(pred_positions.cpu().numpy(), caption, [f'./results/vq_vae_loc3d_mini/{b}_pred.gif'])
+        pose_vis = plot_3d.draw_to_batch(positions.cpu().numpy(), caption, [f'./results/vq_vae_loc3d_mini/{b}_gt.gif'])
 
 
 final_metric = mr_metric.compute(None)

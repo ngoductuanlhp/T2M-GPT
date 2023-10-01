@@ -39,7 +39,7 @@ class VQMotionDataset(data.Dataset):
         mean = np.load(pjoin(self.data_root, 'Mean.npy'))[..., :(self.joints_num - 1) * 3 + 4]
         std = np.load(pjoin(self.data_root, 'Std.npy'))[..., :(self.joints_num - 1) * 3 + 4]
 
-        split_file = pjoin(self.data_root, 'train.txt')
+        split_file = pjoin(self.data_root, 'train_mini.txt')
 
         self.data = []
         self.lengths = []

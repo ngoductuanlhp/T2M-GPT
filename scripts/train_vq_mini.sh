@@ -5,10 +5,13 @@ CUDA_VISIBLE_DEVICES=$1 python3 train_vq.py \
 --lr-scheduler 50000 \
 --warm-up-iter 1000 \
 --print-iter 100 \
---nb-code 512 \
+--nb-code 128 \
 --down-t 2 \
 --depth 3 \
 --dilation-growth-rate 3 \
+--width 128 \
+--output-emb-width 128 \
+--code-dim 128 \
 --out-dir output \
 --dataname t2m \
 --vq-act relu \
