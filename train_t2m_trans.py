@@ -8,6 +8,7 @@ from torch.distributions import Categorical
 import json
 import clip
 from tqdm import tqdm
+from einops import rearrange, repeat
 
 import options.option_transformer as option_trans
 import models.vqvae as vqvae
@@ -17,6 +18,7 @@ from dataset import dataset_TM_train
 from dataset import dataset_TM_eval
 from dataset import dataset_tokenize
 import models.t2m_trans as trans
+from models.t2m_trans import uniform, cosine_schedule
 from options.get_eval_option import get_opt
 from models.evaluator_wrapper import EvaluatorModelWrapper
 import warnings
@@ -116,7 +118,7 @@ if not os.path.exists('dataset/HumanML3D/VQVAE/000002.npy'):
         np.save(pjoin(args.vq_dir, name[0] +'.npy'), target)
 
 
-train_loader = dataset_TM_train.DATALoader(args.dataname, args.batch_size, args.nb_code, args.vq_name, unit_length=2**args.down_t, num_workers=8)
+train_loader = dataset_TM_train.DATALoader(args.dataname, args.batch_size, args.nb_code, args.vq_name, unit_length=2**args.down_t, num_workers=8, split=args.split)
 train_loader_iter = dataset_TM_train.cycle(train_loader)
 
 
@@ -138,28 +140,75 @@ while nb_iter <= args.total_iter:
     batch = next(train_loader_iter)
     clip_text, m_tokens, m_tokens_len, mask_token = batch
     m_tokens, m_tokens_len, mask_token = m_tokens.cuda(), m_tokens_len.cuda(), mask_token.cuda()
-    bs = m_tokens.shape[0]
-    target = m_tokens    # (bs, 26)
-    target = target.cuda()
+    
+    bs, seq_len = m_tokens.shape[0], m_tokens.shape[1]
+    # seq_len = seq_len -1 # FIXME -1 to remove the [END] token
+    
+    target = m_tokens   # (bs, 26)
+    mask_token = mask_token
     
     text = clip.tokenize(clip_text, truncate=True).cuda()
     
     feat_clip_text = clip_model.encode_text(text).float()
 
-    input_index = target[:,:-1]
+    input_index = target
 
-    if args.pkeep == -1:
-        proba = np.random.rand(1)[0]
-        mask = torch.bernoulli(proba * torch.ones(input_index.shape,
-                                                         device=input_index.device))
-    else:
-        mask = torch.bernoulli(args.pkeep * torch.ones(input_index.shape,
-                                                         device=input_index.device))
-    mask = mask.round().to(dtype=torch.int64)
-    r_indices = torch.randint_like(input_index, args.nb_code)
-    a_indices = mask*input_index+(1-mask)*r_indices
+    # NOTE masking
+    # if args.pkeep == -1:
+    #     proba = np.random.rand(1)[0]
+    #     mask = torch.bernoulli(proba * torch.ones(input_index.shape,
+    #                                                      device=input_index.device))
+    # else:
+    #     mask = torch.bernoulli(args.pkeep * torch.ones(input_index.shape,
+    #                                                      device=input_index.device))
+    # mask = mask.round().to(dtype=torch.int64)
+    # r_indices = torch.randint_like(input_index, args.nb_code)
+    # a_indices = mask*input_index+(1-mask)*r_indices
+    ######################!SECTION
+    
+    # batch, seq_len = idxs.shape[0], idxs.shape[1]
+    device = target.device
 
+    rand_time = uniform((bs,), device = device)
+    rand_mask_probs = cosine_schedule(rand_time)
+    num_token_masked = (m_tokens_len * rand_mask_probs).round().clamp(min = 1)
+
+    # mask_id = self.mask_id
+    # batch_randperm = torch.rand((bs, seq_len), device = device).argsort(dim = -1)
+    # mask = batch_randperm < rearrange(num_token_masked, 'b -> b 1')
+    mask_arr = []
+    for b in range(bs):
+        mask = torch.zeros((seq_len), dtype=torch.bool, device=target.device)
+        batch_randperm = torch.rand((m_tokens_len[b]+1), device = device).argsort(dim = -1)
+        mask_ = batch_randperm < num_token_masked[b]
+        mask_[-1] = 1
+        mask[:m_tokens_len[b]+1] = mask_
+
+        mask_arr.append(mask)
+
+    mask = torch.stack(mask_arr, dim=0) # bs, seq_len
+
+    # FIXME make the mask of last token to 1
+    # mask[:, -1] = 1
+
+    # breakpoint()
+
+    # mask_id = self.transformer.mask_id
+    target = torch.where(mask, target, -100)
+
+    # if self.no_mask_token_prob > 0.:
+    #     no_mask_mask = get_mask_subset_prob(mask, self.no_mask_token_prob)
+    #     mask &= ~no_mask_mask
+    # r_indices = torch.randint_like(input_index, args.nb_code)
+    # mask = mask.float()
+    # a_indices = (mask * input_index + (1-mask) * r_indices).long()
+    a_indices = torch.where(mask, net.vqvae.num_code + 2, input_index)
+
+    
+    # NOTE Forward model
     cls_pred = trans_encoder(a_indices, feat_clip_text)
+
+    # breakpoint()
     cls_pred = cls_pred.contiguous()
 
     loss_cls = 0.0
@@ -167,7 +216,7 @@ while nb_iter <= args.total_iter:
 
     # breakpoint()
     loss_cls = loss_ce(cls_pred.permute(0,2,1), target) # B, len
-    loss_cls = (loss_cls.sum(-1) / m_tokens_len)
+    loss_cls = (loss_cls.sum(-1) / (num_token_masked + 1))
     loss_cls = loss_cls.mean()
 
 
@@ -179,7 +228,8 @@ while nb_iter <= args.total_iter:
     probs[~mask_token] = 1e-6
     dist = Categorical(probs)
     cls_pred_index = dist.sample()
-    cls_pred_index[~mask_token] = -1111
+    cls_pred_index[~mask_token] = -111
+    cls_pred_index[~mask] = -111
     right_num += (cls_pred_index.flatten(0) == target.flatten(0)).sum().item()
 
 
@@ -205,7 +255,7 @@ while nb_iter <= args.total_iter:
     scheduler.step()
 
     avg_loss_cls = avg_loss_cls + loss_cls.item()
-    nb_sample_train = nb_sample_train + (m_tokens_len + 1).sum().item()
+    nb_sample_train = nb_sample_train + (num_token_masked + 1).sum().item()
 
     nb_iter += 1
     if nb_iter % args.print_iter ==  0 :

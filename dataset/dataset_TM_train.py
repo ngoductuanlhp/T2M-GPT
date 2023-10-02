@@ -16,7 +16,7 @@ def collate_fn(batch):
 
 '''For use of training text-2-motion generative model'''
 class Text2MotionDataset(data.Dataset):
-    def __init__(self, dataset_name, feat_bias = 5, unit_length = 4, codebook_size = 1024, tokenizer_name=None):
+    def __init__(self, dataset_name, feat_bias = 5, unit_length = 4, codebook_size = 1024, tokenizer_name=None, split='train'):
         
         self.max_length = 64
         self.pointer = 0
@@ -47,7 +47,7 @@ class Text2MotionDataset(data.Dataset):
             self.max_motion_length = 26 if unit_length == 8 else 51
             kinematic_chain = paramUtil.kit_kinematic_chain
 
-        split_file = pjoin(self.data_root, 'train.txt')
+        split_file = pjoin(self.data_root, f'{split}.txt')
 
 
         id_list = []
@@ -116,7 +116,7 @@ class Text2MotionDataset(data.Dataset):
         m_tokens = random.choice(m_token_list)
 
         text_data = random.choice(text_list)
-        caption= text_data['caption']
+        caption = text_data['caption']
 
         # print('1')
         
@@ -148,9 +148,9 @@ class Text2MotionDataset(data.Dataset):
 
 def DATALoader(dataset_name,
                 batch_size, codebook_size, tokenizer_name, unit_length=4,
-                num_workers = 8) : 
+                num_workers = 8, split='train') : 
 
-    train_loader = torch.utils.data.DataLoader(Text2MotionDataset(dataset_name, codebook_size = codebook_size, tokenizer_name = tokenizer_name, unit_length=unit_length),
+    train_loader = torch.utils.data.DataLoader(Text2MotionDataset(dataset_name, codebook_size = codebook_size, tokenizer_name = tokenizer_name, unit_length=unit_length, split=split),
                                               batch_size,
                                               shuffle=True,
                                               num_workers=num_workers,
