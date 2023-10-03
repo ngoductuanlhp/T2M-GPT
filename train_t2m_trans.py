@@ -1,5 +1,6 @@
 import os 
 import torch
+import torch.nn.functional as F
 import numpy as np
 
 from torch.utils.tensorboard import SummaryWriter
@@ -18,7 +19,7 @@ from dataset import dataset_TM_train
 from dataset import dataset_TM_eval
 from dataset import dataset_tokenize
 import models.t2m_trans as trans
-from models.t2m_trans import uniform, cosine_schedule
+from models.t2m_trans import uniform, cosine_schedule, get_mask_subset_with_prob
 from options.get_eval_option import get_opt
 from models.evaluator_wrapper import EvaluatorModelWrapper
 import warnings
@@ -73,7 +74,8 @@ trans_encoder = trans.Text2Motion_Transformer(num_vq=args.nb_code,
                                 num_layers=args.num_layers, 
                                 n_head=args.n_head_gpt, 
                                 drop_out_rate=args.drop_out_rate, 
-                                fc_rate=args.ff_rate)
+                                fc_rate=args.ff_rate,
+                                has_cross_attn= not args.no_cross_attn)
 
 
 print ('loading checkpoint from {}'.format(args.resume_pth))
@@ -169,24 +171,30 @@ while nb_iter <= args.total_iter:
     # batch, seq_len = idxs.shape[0], idxs.shape[1]
     device = target.device
 
-    rand_time = uniform((bs,), device = device)
-    rand_mask_probs = cosine_schedule(rand_time)
-    num_token_masked = (m_tokens_len * rand_mask_probs).round().clamp(min = 1)
-
+    # rand_time = uniform((bs,), device = device)
+    # rand_mask_probs = cosine_schedule(rand_time)
+    # num_token_masked = (m_tokens_len * rand_mask_probs).round().clamp(min = 1)
+    # get_mask_subset_with_prob
+    rand_step = torch.randint(0, 18, (bs,)).cuda() / 18.
+    mask_token_prob = torch.cos(rand_step * np.pi * 0.5) # cosine schedule was best
+    num_token_masked = (m_tokens_len * mask_token_prob).round().clamp(min = 1)
     # mask_id = self.mask_id
     # batch_randperm = torch.rand((bs, seq_len), device = device).argsort(dim = -1)
     # mask = batch_randperm < rearrange(num_token_masked, 'b -> b 1')
-    mask_arr = []
-    for b in range(bs):
-        mask = torch.zeros((seq_len), dtype=torch.bool, device=target.device)
-        batch_randperm = torch.rand((m_tokens_len[b]+1), device = device).argsort(dim = -1)
-        mask_ = batch_randperm < num_token_masked[b]
-        mask_[-1] = 1
-        mask[:m_tokens_len[b]+1] = mask_
+    
+    mask = get_mask_subset_with_prob(mask_token, mask_token_prob)
+    # breakpoint()
+    # mask_arr = []
+    # for b in range(bs):
+    #     mask = torch.zeros((seq_len), dtype=torch.bool, device=target.device)
+    #     batch_randperm = torch.rand((m_tokens_len[b]+1), device = device).argsort(dim = -1)
+    #     mask_ = batch_randperm < num_token_masked[b]
+    #     # mask_[-1] = 1
+    #     mask[:m_tokens_len[b]+1] = mask_
 
-        mask_arr.append(mask)
+    #     mask_arr.append(mask)
 
-    mask = torch.stack(mask_arr, dim=0) # bs, seq_len
+    # mask = torch.stack(mask_arr, dim=0) # bs, seq_len
 
     # FIXME make the mask of last token to 1
     # mask[:, -1] = 1
@@ -194,7 +202,8 @@ while nb_iter <= args.total_iter:
     # breakpoint()
 
     # mask_id = self.transformer.mask_id
-    target = torch.where(mask, target, -100)
+    a_indices = torch.where(mask, net.vqvae.num_code + 2, input_index)
+    
 
     # if self.no_mask_token_prob > 0.:
     #     no_mask_mask = get_mask_subset_prob(mask, self.no_mask_token_prob)
@@ -202,35 +211,38 @@ while nb_iter <= args.total_iter:
     # r_indices = torch.randint_like(input_index, args.nb_code)
     # mask = mask.float()
     # a_indices = (mask * input_index + (1-mask) * r_indices).long()
-    a_indices = torch.where(mask, net.vqvae.num_code + 2, input_index)
 
     
     # NOTE Forward model
-    cls_pred = trans_encoder(a_indices, feat_clip_text)
+    cls_pred = trans_encoder(a_indices, feat_clip_text, mask_token)
 
     # breakpoint()
     cls_pred = cls_pred.contiguous()
 
     loss_cls = 0.0
-    target[~mask_token] = -100
+    # target[~mask_token] = -100 # NOTE ignore padded token
+    # target[~mask] = -100 # NOTE ignore masked token
 
     # breakpoint()
-    loss_cls = loss_ce(cls_pred.permute(0,2,1), target) # B, len
-    loss_cls = (loss_cls.sum(-1) / (num_token_masked + 1))
-    loss_cls = loss_cls.mean()
+    cls_pred_ = cls_pred.flatten(0,1)[mask.flatten(0,1)]
+    target_ = target.flatten(0,1)[mask.flatten(0,1)]
+    # breakpoint()
+    loss_cls = F.cross_entropy(cls_pred_, target_) # B, len
+    # loss_cls = (loss_cls.sum(-1) / (num_token_masked + 1))
+    # loss_cls = loss_cls.mean()
 
 
 
-    cls_pred[~mask_token] = -float("inf")
+    # cls_pred[~mask_token] = -float("inf")
 
     # breakpoint()
-    probs = torch.softmax(cls_pred, dim=-1)
-    probs[~mask_token] = 1e-6
+    probs = torch.softmax(cls_pred_, dim=-1)
+    # probs[~mask_token] = 1e-6
     dist = Categorical(probs)
     cls_pred_index = dist.sample()
-    cls_pred_index[~mask_token] = -111
-    cls_pred_index[~mask] = -111
-    right_num += (cls_pred_index.flatten(0) == target.flatten(0)).sum().item()
+    # cls_pred_index[~mask_token] = -111
+    # cls_pred_index[~mask] = -111
+    right_num += (cls_pred_index == target_).sum().item()
 
 
     # for i in range(bs):
@@ -255,7 +267,7 @@ while nb_iter <= args.total_iter:
     scheduler.step()
 
     avg_loss_cls = avg_loss_cls + loss_cls.item()
-    nb_sample_train = nb_sample_train + (num_token_masked + 1).sum().item()
+    nb_sample_train = nb_sample_train + (mask).sum().item()
 
     nb_iter += 1
     if nb_iter % args.print_iter ==  0 :
@@ -270,7 +282,28 @@ while nb_iter <= args.total_iter:
         nb_sample_train = 0
 
     if nb_iter % args.eval_iter ==  0:
-        best_fid, best_iter, best_div, best_top1, best_top2, best_top3, best_matching, writer, logger = eval_trans.evaluation_transformer(args.out_dir, val_loader, net, trans_encoder, logger, writer, nb_iter, best_fid, best_iter, best_div, best_top1, best_top2, best_top3, best_matching, clip_model=clip_model, eval_wrapper=eval_wrapper)
+        best_fid, best_iter, best_div, best_top1, best_top2, best_top3, best_matching, writer, logger = \
+        eval_trans.evaluation_transformer(
+            args.out_dir, 
+            val_loader, 
+            net, 
+            trans_encoder, 
+            logger, 
+            writer, 
+            nb_iter, 
+            best_fid, 
+            best_iter, 
+            best_div, 
+            best_top1, 
+            best_top2, 
+            best_top3, 
+            best_matching, 
+            clip_model=clip_model, eval_wrapper=eval_wrapper, optimizer=optimizer, scheduler=scheduler)
+
+
+    if nb_iter % 1000 == 0:
+        torch.save({'trans' : trans.state_dict(), 'optimizer': optimizer.state_dict(), 'scheduler': scheduler.state_dict()}, os.path.join(args.out_dir, 'net_last.pth'))
+
 
     if nb_iter == args.total_iter: 
         msg_final = f"Train. Iter {best_iter} : FID. {best_fid:.5f}, Diversity. {best_div:.4f}, TOP1. {best_top1:.4f}, TOP2. {best_top2:.4f}, TOP3. {best_top3:.4f}"

@@ -1,6 +1,6 @@
 CUDA_VISIBLE_DEVICES=$1 python3 train_t2m_trans.py  \
---exp-name GPT_MaskGit_fixbug_mask \
---batch-size 128 \
+--exp-name GPT_MaskGit_fixmask_fixselfattn_nocross_attn \
+--batch-size 256 \
 --num-layers 9 \
 --embed-dim-gpt 1024 \
 --nb-code 512 \
@@ -8,18 +8,19 @@ CUDA_VISIBLE_DEVICES=$1 python3 train_t2m_trans.py  \
 --block-size 51 \
 --ff-rate 4 \
 --drop-out-rate 0.1 \
+--no-cross-attn \
 --resume-pth pretrained/VQVAE/net_last.pth \
 --vq-name VQVAE \
 --out-dir output \
---total-iter 300000 \
---lr-scheduler 150000 \
+--total-iter 150000 \
+--lr-scheduler 75000 \
 --lr 0.0001 \
 --dataname t2m \
 --split train \
 --down-t 2 \
 --depth 3 \
 --quantizer ema_reset \
---eval-iter 10000 \
+--eval-iter 5000 \
 --pkeep 0.5 \
 --dilation-growth-rate 3 \
 --vq-act relu

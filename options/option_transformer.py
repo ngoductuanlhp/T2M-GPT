@@ -44,7 +44,10 @@ def get_args_parser():
     parser.add_argument("--n-head-gpt", type=int, default=8, help="nb of heads")
     parser.add_argument("--ff-rate", type=int, default=4, help="feedforward size")
     parser.add_argument("--drop-out-rate", type=float, default=0.1, help="dropout ratio in the pos encoding")
-    
+    parser.add_argument("--no-cross-attn", action='store_true', help="use cross attn for text conditioning")
+
+
+
     ## quantizer
     parser.add_argument("--quantizer", type=str, default='ema_reset', choices = ['ema', 'orig', 'ema_reset', 'reset'], help="eps for optimal transport")
     parser.add_argument('--quantbeta', type=float, default=1.0, help='dataset directory')

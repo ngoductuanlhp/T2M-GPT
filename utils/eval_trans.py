@@ -170,7 +170,7 @@ def evaluation_vqvae(out_dir, val_loader, net, logger, writer, nb_iter, best_fid
 
 
 @torch.no_grad()        
-def evaluation_transformer(out_dir, val_loader, net, trans, logger, writer, nb_iter, best_fid, best_iter, best_div, best_top1, best_top2, best_top3, best_matching, clip_model, eval_wrapper, draw = True, save = True, savegif=False) : 
+def evaluation_transformer(out_dir, val_loader, net, trans, logger, writer, nb_iter, best_fid, best_iter, best_div, best_top1, best_top2, best_top3, best_matching, clip_model, eval_wrapper, draw = True, save = True, savegif=False, optimizer=None, scheduler=None) : 
 
     trans.eval()
     nb_sample = 0
@@ -195,12 +195,13 @@ def evaluation_transformer(out_dir, val_loader, net, trans, logger, writer, nb_i
 
             num_joints = 21 if pose.shape[-1] == 251 else 22
 
+            bs = clip_text.shape[0]
+            seq = 51
+            # pose = pose.cuda().float() # bs, nb_joints, joints_dim, seq_len
+            # gt_ids = net.encode(pose)
 
-            pose = pose.cuda().float() # bs, nb_joints, joints_dim, seq_len
-            gt_ids = net.encode(pose)
 
-
-            bs, seq = gt_ids.shape[:2]
+            # bs, seq = gt_ids.shape[:2]
             
             text = clip.tokenize(clip_text, truncate=True).cuda()
 
@@ -212,65 +213,66 @@ def evaluation_transformer(out_dir, val_loader, net, trans, logger, writer, nb_i
             timesteps = 18
             seq_len = seq
 
-            # ids = torch.full((bs, seq_len), net.vqvae.num_code + 2, dtype = torch.long).cuda()
-            ids = gt_ids
+            ids = torch.full((bs, seq_len), net.vqvae.num_code + 2, dtype = torch.long).cuda()
+            # ids = gt_ids
             # rand_ = torch.rand((bs, seq_len), dtype = torch.float).cuda()
             # ids[rand_ < 0.3] = net.vqvae.num_code + 2
             scores = torch.zeros((bs, seq_len), dtype = torch.float32).cuda()
+            token_mask = torch.ones((bs, seq_len), dtype = torch.bool).cuda()
             # breakpoint()
 
-            # for timestep, steps_until_x0 in tqdm(zip(torch.linspace(0, 1, timesteps).cuda(), reversed(range(timesteps))), total = timesteps):
+            for timestep, steps_until_x0 in tqdm(zip(torch.linspace(0, 1, timesteps).cuda(), reversed(range(timesteps))), total = timesteps):
 
-            #     rand_mask_prob = cosine_schedule(timestep)
-            #     num_token_masked = max(int((rand_mask_prob * seq_len).item()), 1)
+                rand_mask_prob = cosine_schedule(timestep)
+                num_token_masked = max(int((rand_mask_prob * seq_len).item()), 1)
 
-            #     masked_indices = scores.topk(num_token_masked, dim = -1).indices
+                masked_indices = scores.topk(num_token_masked, dim = -1).indices
 
-            #     ids = ids.scatter(1, masked_indices, net.vqvae.num_code + 2)
+                ids = ids.scatter(1, masked_indices, net.vqvae.num_code + 2)
 
-            #     logits = trans(ids, feat_clip_text)
+                logits = trans(ids, feat_clip_text, token_mask)
 
-            #     filtered_logits = top_k(logits, 0.9)
+                filtered_logits = top_k(logits, 0.9)
 
-            #     temperature = 1.0 * (steps_until_x0 / timesteps) # temperature is annealed
+                temperature = 1.0 * (steps_until_x0 / timesteps) # temperature is annealed
 
-            #     pred_ids = gumbel_sample(filtered_logits, temperature = temperature, dim = -1)
+                pred_ids = gumbel_sample(filtered_logits, temperature = temperature, dim = -1)
 
-            #     is_mask = (ids == net.vqvae.num_code + 2)
+                is_mask = (ids == net.vqvae.num_code + 2)
 
-            #     ids = torch.where(
-            #         is_mask,
-            #         pred_ids,
-            #         ids
-            #     )
+                ids = torch.where(
+                    is_mask,
+                    pred_ids,
+                    ids
+                )
 
-            #     use_token_critic = False
-            #     if use_token_critic:
-            #         scores = token_critic_fn(
-            #             ids,
-            #             text_embeds = text_embeds,
-            #             conditioning_token_ids = cond_ids,
-            #             cond_scale = cond_scale
-            #         )
+                use_token_critic = False
+                if use_token_critic:
+                    scores = token_critic_fn(
+                        ids,
+                        text_embeds = text_embeds,
+                        conditioning_token_ids = cond_ids,
+                        cond_scale = cond_scale
+                    )
 
-            #         scores = rearrange(scores, '... 1 -> ...')
+                    scores = rearrange(scores, '... 1 -> ...')
 
-            #         scores = scores + (uniform(scores.shape, device = device) - 0.5) * critic_noise_scale * (steps_until_x0 / timesteps)
+                    scores = scores + (uniform(scores.shape, device = device) - 0.5) * critic_noise_scale * (steps_until_x0 / timesteps)
 
-            #     else:
-            #         probs_without_temperature = logits.softmax(dim = -1)
+                else:
+                    probs_without_temperature = logits.softmax(dim = -1)
 
-            #         scores = 1 - probs_without_temperature.gather(2, pred_ids[..., None])
-            #         scores = rearrange(scores, '... 1 -> ...')
+                    scores = 1 - probs_without_temperature.gather(2, pred_ids[..., None])
+                    scores = rearrange(scores, '... 1 -> ...')
 
-            #         # if not can_remask_prev_masked:
-            #         scores = scores.masked_fill(~is_mask, -1e5)
-            #         # else:
-            #         #     assert self.no_mask_token_prob > 0., 'without training with some of the non-masked tokens forced to predict, not sure if the logits will be meaningful for these token'
+                    # if not can_remask_prev_masked:
+                    scores = scores.masked_fill(~is_mask, -1e5)
+                    # else:
+                    #     assert self.no_mask_token_prob > 0., 'without training with some of the non-masked tokens forced to predict, not sure if the logits will be meaningful for these token'
 
-            #     # get ids
+                # get ids
 
-            #     # ids = rearrange(ids, 'b (i j) -> b i j', i = fmap_size, j = fmap_size)
+                # ids = rearrange(ids, 'b (i j) -> b i j', i = fmap_size, j = fmap_size)
 
 
             # breakpoint()
@@ -399,7 +401,7 @@ def evaluation_transformer(out_dir, val_loader, net, trans, logger, writer, nb_i
         best_top3 = R_precision[2]
 
     if save:
-        torch.save({'trans' : trans.state_dict()}, os.path.join(out_dir, 'net_last.pth'))
+        torch.save({'trans' : trans.state_dict(), 'optimizer': optimizer.state_dict(), 'scheduler': scheduler.state_dict()}, os.path.join(out_dir, f'net_{nb_iter}.pth'))
 
     trans.train()
     return best_fid, best_iter, best_div, best_top1, best_top2, best_top3, best_matching, writer, logger
