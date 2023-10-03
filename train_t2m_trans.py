@@ -105,19 +105,19 @@ nb_sample_train = 0
 ##### ---- get code ---- #####
 
 ##### ---- Dataloader ---- #####
-if not os.path.exists('dataset/HumanML3D/VQVAE/000002.npy'):
-    train_loader_token = dataset_tokenize.DATALoader(args.dataname, 1, unit_length=2**args.down_t)
-    for batch in tqdm(train_loader_token):
-        pose, name = batch
-        # if os.path.exists(pjoin(args.vq_dir, name[0] +'.npy')):
-        #     break
+# if not os.path.exists('dataset/HumanML3D/VQVAE/000002.npy'):
+#     train_loader_token = dataset_tokenize.DATALoader(args.dataname, 1, unit_length=2**args.down_t)
+#     for batch in tqdm(train_loader_token):
+#         pose, name = batch
+#         # if os.path.exists(pjoin(args.vq_dir, name[0] +'.npy')):
+#         #     break
 
-        bs, seq = pose.shape[0], pose.shape[1]
+#         bs, seq = pose.shape[0], pose.shape[1]
 
-        pose = pose.cuda().float() # bs, nb_joints, joints_dim, seq_len
-        target = net.encode(pose)
-        target = target.cpu().numpy()
-        np.save(pjoin(args.vq_dir, name[0] +'.npy'), target)
+#         pose = pose.cuda().float() # bs, nb_joints, joints_dim, seq_len
+#         target = net.encode(pose)
+#         target = target.cpu().numpy()
+#         np.save(pjoin(args.vq_dir, name[0] +'.npy'), target)
 
 
 train_loader = dataset_TM_train.DATALoader(args.dataname, args.batch_size, args.nb_code, args.vq_name, unit_length=2**args.down_t, num_workers=8, split=args.split)

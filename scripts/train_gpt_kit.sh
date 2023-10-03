@@ -1,0 +1,25 @@
+CUDA_VISIBLE_DEVICES=$1 python3 train_t2m_trans.py  \
+--exp-name GPT_MaskGit_fixmask_fixselfattn_KIT \
+--batch-size 256 \
+--num-layers 9 \
+--embed-dim-gpt 1024 \
+--nb-code 512 \
+--n-head-gpt 16 \
+--block-size 51 \
+--ff-rate 4 \
+--drop-out-rate 0.1 \
+--resume-pth pretrained/VQVAE_KIT/net_best_fid.pth \
+--vq-name VQVAE \
+--out-dir output \
+--total-iter 150000 \
+--lr-scheduler 75000 \
+--lr 0.0001 \
+--dataname kit \
+--split train \
+--down-t 2 \
+--depth 3 \
+--quantizer ema_reset \
+--eval-iter 5000 \
+--pkeep 0.5 \
+--dilation-growth-rate 3 \
+--vq-act relu
