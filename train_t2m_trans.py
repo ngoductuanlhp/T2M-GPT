@@ -302,7 +302,7 @@ while nb_iter <= args.total_iter:
 
 
     if nb_iter % 1000 == 0:
-        torch.save({'trans' : trans.state_dict(), 'optimizer': optimizer.state_dict(), 'scheduler': scheduler.state_dict()}, os.path.join(args.out_dir, 'net_last.pth'))
+        torch.save({'trans' : trans_encoder.state_dict(), 'optimizer': optimizer.state_dict(), 'scheduler': scheduler.state_dict()}, os.path.join(args.out_dir, 'net_last.pth'))
 
 
     if nb_iter == args.total_iter: 
