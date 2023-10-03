@@ -6,6 +6,14 @@ from torch.distributions import Categorical
 import models.pos_encoding as pos_encoding
 from einops import rearrange
 
+def prob_mask_like(shape, prob, device):
+    if prob == 1:
+        return torch.ones(shape, device = device, dtype = torch.bool)
+    elif prob == 0:
+        return torch.zeros(shape, device = device, dtype = torch.bool)
+    else:
+        return torch.zeros(shape, device = device).float().uniform_(0, 1) < prob
+    
 def uniform(shape, min = 0, max = 1, device = None):
     return torch.zeros(shape, device = device).float().uniform_(0, 1)
 
@@ -70,8 +78,8 @@ class Text2Motion_Transformer(nn.Module):
     def get_block_size(self):
         return self.block_size
 
-    def forward(self, idxs, clip_feature, token_mask):
-        logits = self.transformer(idxs, clip_feature, token_mask=token_mask)
+    def forward(self, idxs, clip_feature, token_mask, text_mask):
+        logits = self.transformer(idxs, clip_feature, token_mask=token_mask, text_mask=text_mask)
         # logits = self.trans_head(feat)
         return logits
 
@@ -201,7 +209,7 @@ class CrossConditionalCrossAttention(nn.Module):
         # self.register_buffer("mask", torch.tril(torch.ones(block_size, block_size)).view(1, 1, block_size, block_size))
         self.n_head = n_head
 
-    def forward(self, x, context):
+    def forward(self, x, context, mask=None):
         B, T, C = x.size() 
 
         # calculate query, key, values for all heads in batch and move head forward to be the batch dim
@@ -212,6 +220,12 @@ class CrossConditionalCrossAttention(nn.Module):
         # causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
         att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
         # att = att.masked_fill(self.mask[:,:,:T,:T] == 0, float('-inf'))
+
+        if mask is not None:
+            # att = att.masked_fill(self.mask[:,:,:T,:T] == 0, float('-inf'))
+            mask = rearrange(mask, 'b j -> b 1 1 j')
+            att = att.masked_fill(~mask, -torch.finfo(att.dtype).max)
+            
         att = F.softmax(att, dim=-1)
         att = self.attn_drop(att)
         y = att @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
@@ -242,7 +256,7 @@ class Block(nn.Module):
             self.cross_attn = CrossConditionalCrossAttention(embed_dim, block_size, n_head, drop_out_rate)
             self.ln3 = nn.LayerNorm(embed_dim)
 
-    def forward(self, x, context=None, self_attn_mask=None):
+    def forward(self, x, context=None, self_attn_mask=None, cross_attn_mask=None):
         # breakpoint()
         # x = inp['x']
         # context = inp['context']
@@ -251,7 +265,7 @@ class Block(nn.Module):
 
         x = x + self.attn(self.ln1(x), mask=self_attn_mask)
         if self.has_cross_attn:
-            x = x + self.cross_attn(self.ln3(x), context)
+            x = x + self.cross_attn(self.ln3(x), context, mask=cross_attn_mask)
         x = x + self.mlp(self.ln2(x))
 
         return x 
@@ -298,7 +312,7 @@ class CrossCondTransformer(nn.Module):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
     
-    def forward(self, idx, clip_feature, token_mask):
+    def forward(self, idx, clip_feature, token_mask=None, text_mask=None):
         # if len(idx) == 0:
         #     token_embeddings = self.cond_emb(clip_feature).unsqueeze(1)
         # else:
@@ -323,7 +337,7 @@ class CrossCondTransformer(nn.Module):
             x = x + context_embeddings
 
         for block in self.blocks:
-            x = block(x, context=context_embeddings, self_attn_mask=token_mask)
+            x = block(x, context=context_embeddings, self_attn_mask=token_mask, cross_attn_mask=text_mask)
 
         x = self.ln_f(x)
         logits = self.head(x)

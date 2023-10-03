@@ -45,6 +45,7 @@ def get_args_parser():
     parser.add_argument("--ff-rate", type=int, default=4, help="feedforward size")
     parser.add_argument("--drop-out-rate", type=float, default=0.1, help="dropout ratio in the pos encoding")
     parser.add_argument("--no-cross-attn", action='store_true', help="use cross attn for text conditioning")
+    parser.add_argument("--cond-drop-prob", type=float, default=0.25, help="dropout ratio of text conditioning")
 
 
 

@@ -19,7 +19,7 @@ from dataset import dataset_TM_train
 from dataset import dataset_TM_eval
 from dataset import dataset_tokenize
 import models.t2m_trans as trans
-from models.t2m_trans import uniform, cosine_schedule, get_mask_subset_with_prob
+from models.t2m_trans import uniform, cosine_schedule, get_mask_subset_with_prob, prob_mask_like
 from options.get_eval_option import get_opt
 from models.evaluator_wrapper import EvaluatorModelWrapper
 import warnings
@@ -153,6 +153,10 @@ while nb_iter <= args.total_iter:
     
     feat_clip_text = clip_model.encode_text(text).float()
 
+    if args.cond_drop_prob > 0:
+        keep_mask = prob_mask_like((b,), 1 - args.cond_drop_prob, device = device)
+        text_mask = rearrange(keep_mask, 'b -> b 1') & text_mask
+
     input_index = target
 
     # NOTE masking
@@ -214,7 +218,7 @@ while nb_iter <= args.total_iter:
 
     
     # NOTE Forward model
-    cls_pred = trans_encoder(a_indices, feat_clip_text, mask_token)
+    cls_pred = trans_encoder(a_indices, feat_clip_text, mask_token, text_mask)
 
     # breakpoint()
     cls_pred = cls_pred.contiguous()
