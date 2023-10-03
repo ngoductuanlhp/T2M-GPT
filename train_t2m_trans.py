@@ -153,7 +153,7 @@ while nb_iter <= args.total_iter:
     
     feat_clip_text = clip_model.encode_text(text).float()
 
-    input_index = target
+    input_index = target[:, :-1]
 
     # NOTE masking
     # if args.pkeep == -1:
@@ -182,7 +182,7 @@ while nb_iter <= args.total_iter:
     # batch_randperm = torch.rand((bs, seq_len), device = device).argsort(dim = -1)
     # mask = batch_randperm < rearrange(num_token_masked, 'b -> b 1')
     
-    mask = get_mask_subset_with_prob(mask_token, mask_token_prob)
+    mask = get_mask_subset_with_prob(mask_token[:, :-1], mask_token_prob)
     # breakpoint()
     # mask_arr = []
     # for b in range(bs):
@@ -214,7 +214,7 @@ while nb_iter <= args.total_iter:
 
     
     # NOTE Forward model
-    cls_pred = trans_encoder(a_indices, feat_clip_text, mask_token)
+    cls_pred = trans_encoder(a_indices, feat_clip_text, mask_token[:, :-1])
 
     # breakpoint()
     cls_pred = cls_pred.contiguous()
@@ -225,7 +225,7 @@ while nb_iter <= args.total_iter:
 
     # breakpoint()
     cls_pred_ = cls_pred.flatten(0,1)[mask.flatten(0,1)]
-    target_ = target.flatten(0,1)[mask.flatten(0,1)]
+    target_ = target[:, :-1].flatten(0,1)[mask.flatten(0,1)]
     # breakpoint()
     loss_cls = F.cross_entropy(cls_pred_, target_) # B, len
     # loss_cls = (loss_cls.sum(-1) / (num_token_masked + 1))

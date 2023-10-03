@@ -281,6 +281,7 @@ class CrossCondTransformer(nn.Module):
         self.blocks = nn.ModuleList([Block(embed_dim, block_size, n_head, drop_out_rate, fc_rate, has_cross_attn=has_cross_attn) for _ in range(num_layers)])
         # self.blocks = nn.ModuleList([Block(embed_dim, block_size, n_head, drop_out_rate, fc_rate) for _ in range(num_layers)])
 
+        print('Use cross attn', has_cross_attn)
         self.ln_f = nn.LayerNorm(embed_dim)
         self.head = nn.Linear(embed_dim, num_vq+1, bias=False)
         self.block_size = block_size
@@ -314,16 +315,19 @@ class CrossCondTransformer(nn.Module):
         #     context = torch.cat((context, cond_token_emb), dim = -2)
         #     context_mask = F.pad(context_mask, (0, conditioning_token_ids.shape[-1]), value = True)
 
+        token_embeddings = torch.cat([self.cond_emb(clip_feature).unsqueeze(1), self.tok_emb(idx)], dim=1)
+
+
         token_embeddings = self.tok_emb(idx)
-        context_embeddings = self.cond_emb(clip_feature).unsqueeze(1)
+        # context_embeddings = self.cond_emb(clip_feature).unsqueeze(1)
         x = self.pos_embed(token_embeddings)
 
         # NOTE Add text condition to queries 
-        if not self.has_cross_attn:
-            x = x + context_embeddings
+        # if not self.has_cross_attn:
+        #     x = x + context_embeddings
 
         for block in self.blocks:
-            x = block(x, context=context_embeddings, self_attn_mask=token_mask)
+            x = block(x, self_attn_mask=token_mask)
 
         x = self.ln_f(x)
         logits = self.head(x)
