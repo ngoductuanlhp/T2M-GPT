@@ -1,6 +1,6 @@
-CUDA_VISIBLE_DEVICES=$1 python3 GPT_eval_multi.py  \
---exp-name TEST_GPT_debug \
---batch-size 128 \
+CUDA_VISIBLE_DEVICES=$1 python3 GPT_eval.py  \
+--exp-name VAL_GPT_debug \
+--batch-size 16 \
 --num-layers 9 \
 --embed-dim-gpt 1024 \
 --nb-code 512 \
@@ -8,13 +8,14 @@ CUDA_VISIBLE_DEVICES=$1 python3 GPT_eval_multi.py  \
 --block-size 51 \
 --ff-rate 4 \
 --drop-out-rate 0.1 \
---resume-pth output/VQVAE/net_last.pth \
+--resume-pth pretrained/VQVAE/net_last.pth \
 --vq-name VQVAE \
 --out-dir output \
 --total-iter 300000 \
 --lr-scheduler 150000 \
 --lr 0.0001 \
 --dataname t2m \
+--split val_mini \
 --down-t 2 \
 --depth 3 \
 --quantizer ema_reset \
@@ -22,4 +23,4 @@ CUDA_VISIBLE_DEVICES=$1 python3 GPT_eval_multi.py  \
 --pkeep 0.5 \
 --dilation-growth-rate 3 \
 --vq-act relu \
---resume-trans output/GPT_debug/net_best_fid.pth
+--resume-trans output/GPT_MaskGit_fixbug_mask/net_last.pth

@@ -8,7 +8,8 @@ from scipy import linalg
 import visualization.plot_3d_global as plot_3d
 from utils.motion_process import recover_from_ric, recover_from_rot
 from tqdm import tqdm
-
+from models.t2m_trans import cosine_schedule, uniform, top_k, gumbel_sample
+from einops import rearrange, repeat
 
 
 
@@ -192,8 +193,14 @@ def evaluation_transformer(out_dir, val_loader, net, trans, logger, writer, nb_i
             print('test')
             word_embeddings, pos_one_hots, clip_text, sent_len, pose, m_length, token, name = batch
 
-            bs, seq = pose.shape[:2]
             num_joints = 21 if pose.shape[-1] == 251 else 22
+
+
+            pose = pose.cuda().float() # bs, nb_joints, joints_dim, seq_len
+            gt_ids = net.encode(pose)
+
+
+            bs, seq = gt_ids.shape[:2]
             
             text = clip.tokenize(clip_text, truncate=True).cuda()
 
@@ -201,13 +208,85 @@ def evaluation_transformer(out_dir, val_loader, net, trans, logger, writer, nb_i
             pred_pose_eval = torch.zeros((bs, seq, pose.shape[-1])).cuda()
             pred_len = torch.ones(bs).long()
 
-            for k in tqdm(range(bs)):
-                try:
-                    index_motion = trans.sample(feat_clip_text[k:k+1], False)
-                except:
-                    index_motion = torch.ones(1,1).cuda().long()
 
-                pred_pose = net.forward_decoder(index_motion)
+            timesteps = 18
+            seq_len = seq
+
+            # ids = torch.full((bs, seq_len), net.vqvae.num_code + 2, dtype = torch.long).cuda()
+            ids = gt_ids
+            # rand_ = torch.rand((bs, seq_len), dtype = torch.float).cuda()
+            # ids[rand_ < 0.3] = net.vqvae.num_code + 2
+            scores = torch.zeros((bs, seq_len), dtype = torch.float32).cuda()
+            # breakpoint()
+
+            # for timestep, steps_until_x0 in tqdm(zip(torch.linspace(0, 1, timesteps).cuda(), reversed(range(timesteps))), total = timesteps):
+
+            #     rand_mask_prob = cosine_schedule(timestep)
+            #     num_token_masked = max(int((rand_mask_prob * seq_len).item()), 1)
+
+            #     masked_indices = scores.topk(num_token_masked, dim = -1).indices
+
+            #     ids = ids.scatter(1, masked_indices, net.vqvae.num_code + 2)
+
+            #     logits = trans(ids, feat_clip_text)
+
+            #     filtered_logits = top_k(logits, 0.9)
+
+            #     temperature = 1.0 * (steps_until_x0 / timesteps) # temperature is annealed
+
+            #     pred_ids = gumbel_sample(filtered_logits, temperature = temperature, dim = -1)
+
+            #     is_mask = (ids == net.vqvae.num_code + 2)
+
+            #     ids = torch.where(
+            #         is_mask,
+            #         pred_ids,
+            #         ids
+            #     )
+
+            #     use_token_critic = False
+            #     if use_token_critic:
+            #         scores = token_critic_fn(
+            #             ids,
+            #             text_embeds = text_embeds,
+            #             conditioning_token_ids = cond_ids,
+            #             cond_scale = cond_scale
+            #         )
+
+            #         scores = rearrange(scores, '... 1 -> ...')
+
+            #         scores = scores + (uniform(scores.shape, device = device) - 0.5) * critic_noise_scale * (steps_until_x0 / timesteps)
+
+            #     else:
+            #         probs_without_temperature = logits.softmax(dim = -1)
+
+            #         scores = 1 - probs_without_temperature.gather(2, pred_ids[..., None])
+            #         scores = rearrange(scores, '... 1 -> ...')
+
+            #         # if not can_remask_prev_masked:
+            #         scores = scores.masked_fill(~is_mask, -1e5)
+            #         # else:
+            #         #     assert self.no_mask_token_prob > 0., 'without training with some of the non-masked tokens forced to predict, not sure if the logits will be meaningful for these token'
+
+            #     # get ids
+
+            #     # ids = rearrange(ids, 'b (i j) -> b i j', i = fmap_size, j = fmap_size)
+
+
+            # breakpoint()
+            for k in tqdm(range(bs)):
+                # try:
+                #     index_motion = trans.sample(feat_clip_text[k:k+1], False)
+                # except:
+                #     index_motion = torch.ones(1,1).cuda().long()
+                ids_ = ids[k]
+                try:
+                    first_end = torch.nonzero(ids_ == net.vqvae.num_code).view(-1)[0]
+                except:
+                    first_end = -1
+                ids_ = ids_[:first_end]
+
+                pred_pose = net.forward_decoder(ids_)
                 cur_len = pred_pose.shape[1]
 
                 pred_len[k] = min(cur_len, seq)

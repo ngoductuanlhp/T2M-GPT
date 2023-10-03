@@ -17,7 +17,7 @@ def collate_fn(batch):
 
 '''For use of training text-2-motion generative model'''
 class Text2MotionDataset(data.Dataset):
-    def __init__(self, dataset_name, is_test, w_vectorizer, feat_bias = 5, max_text_len = 20, unit_length = 4):
+    def __init__(self, dataset_name, is_test, w_vectorizer, feat_bias = 5, max_text_len = 20, unit_length = 4, split='val'):
         
         self.max_length = 20
         self.pointer = 0
@@ -55,7 +55,7 @@ class Text2MotionDataset(data.Dataset):
         if is_test:
             split_file = pjoin(self.data_root, 'test.txt')
         else:
-            split_file = pjoin(self.data_root, 'val.txt')
+            split_file = pjoin(self.data_root, f'{split}.txt')
 
         min_motion_len = 40 if self.dataset_name =='t2m' else 24
         # min_motion_len = 64
@@ -200,9 +200,9 @@ class Text2MotionDataset(data.Dataset):
 
 def DATALoader(dataset_name, is_test,
                 batch_size, w_vectorizer,
-                num_workers = 8, unit_length = 4) : 
+                num_workers = 8, unit_length = 4, split='val') : 
     
-    val_loader = torch.utils.data.DataLoader(Text2MotionDataset(dataset_name, is_test, w_vectorizer, unit_length=unit_length),
+    val_loader = torch.utils.data.DataLoader(Text2MotionDataset(dataset_name, is_test, w_vectorizer, unit_length=unit_length, split=split),
                                               batch_size,
                                               shuffle = True,
                                               num_workers=num_workers,
