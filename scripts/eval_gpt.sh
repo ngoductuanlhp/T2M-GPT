@@ -15,7 +15,7 @@ CUDA_VISIBLE_DEVICES=$1 python3 GPT_eval.py  \
 --lr-scheduler 150000 \
 --lr 0.0001 \
 --dataname t2m \
---split val_mini \
+--split train_small \
 --down-t 2 \
 --depth 3 \
 --quantizer ema_reset \
@@ -23,4 +23,4 @@ CUDA_VISIBLE_DEVICES=$1 python3 GPT_eval.py  \
 --pkeep 0.5 \
 --dilation-growth-rate 3 \
 --vq-act relu \
---resume-trans output/GPT_MaskGit_classifierfree/net_last.pth
+--resume-trans output/GPT_MaskGit_classifierfree_prob0.5/net_15000.pth

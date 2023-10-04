@@ -16,11 +16,12 @@ CUDA_VISIBLE_DEVICES=$1 python3 train_t2m_trans.py  \
 --lr-scheduler 75000 \
 --lr 0.0001 \
 --dataname t2m \
---split train \
+--split train_small \
 --down-t 2 \
 --depth 3 \
 --quantizer ema_reset \
---eval-iter 5000 \
+--eval-iter 1000 \
 --pkeep 0.5 \
 --dilation-growth-rate 3 \
---vq-act relu
+--vq-act relu \
+--resume-trans output/GPT_MaskGit_classifierfree_prob0.5/net_last.pth

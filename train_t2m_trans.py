@@ -42,7 +42,7 @@ logger.info(json.dumps(vars(args), indent=4, sort_keys=True))
 
 from utils.word_vectorizer import WordVectorizer
 w_vectorizer = WordVectorizer('./glove', 'our_vab')
-val_loader = dataset_TM_eval.DATALoader(args.dataname, False, 32, w_vectorizer)
+val_loader = dataset_TM_eval.DATALoader(args.dataname, False, 32, w_vectorizer, split='train_small')
 
 dataset_opt_path = 'checkpoints/kit/Comp_v6_KLD005/opt.txt' if args.dataname == 'kit' else 'checkpoints/t2m/Comp_v6_KLD005/opt.txt'
 
@@ -127,23 +127,27 @@ best_top2=0
 best_top3=0
 best_matching=100
 
-# best_fid, best_iter, best_div, best_top1, best_top2, best_top3, best_matching, writer, logger = \
-#         eval_trans.evaluation_transformer(
-#             args.out_dir, 
-#             val_loader, 
-#             net, 
-#             trans_encoder, 
-#             logger, 
-#             writer, 
-#             nb_iter, 
-#             best_fid, 
-#             best_iter, 
-#             best_div, 
-#             best_top1, 
-#             best_top2, 
-#             best_top3, 
-#             best_matching, 
-#             clip_model=clip_model, eval_wrapper=eval_wrapper, optimizer=optimizer, scheduler=scheduler)
+
+# if nb_iter > 0:
+#     logger.info(f'Starting training from iter {nb_iter}')
+
+best_fid, best_iter, best_div, best_top1, best_top2, best_top3, best_matching, writer, logger = \
+        eval_trans.evaluation_transformer_debug(
+            args.out_dir, 
+            val_loader, 
+            net, 
+            trans_encoder, 
+            logger, 
+            writer, 
+            nb_iter, 
+            best_fid, 
+            best_iter, 
+            best_div, 
+            best_top1, 
+            best_top2, 
+            best_top3, 
+            best_matching, 
+            clip_model=clip_model, eval_wrapper=eval_wrapper, optimizer=optimizer, scheduler=scheduler)
 
 
 
@@ -158,7 +162,7 @@ while nb_iter <= args.total_iter:
     # seq_len = seq_len -1 # FIXME -1 to remove the [END] token
     
     target = m_tokens   # (bs, 26)
-    mask_token = mask_token
+    # mask_token = mask_token
     
     text = clip.tokenize(clip_text, truncate=True).cuda()
     
@@ -231,7 +235,7 @@ while nb_iter <= args.total_iter:
     # mask = mask.float()
     # a_indices = (mask * input_index + (1-mask) * r_indices).long()
 
-    
+    # breakpoint()
     # NOTE Forward model
     cls_pred = trans_encoder(a_indices, feat_clip_text, mask_token, text_mask)
 
@@ -261,6 +265,8 @@ while nb_iter <= args.total_iter:
     cls_pred_index = dist.sample()
     # cls_pred_index[~mask_token] = -111
     # cls_pred_index[~mask] = -111
+    if nb_iter > 300:
+        breakpoint()
     right_num += (cls_pred_index == target_).sum().item()
 
 
@@ -321,7 +327,17 @@ while nb_iter <= args.total_iter:
 
 
     if nb_iter % 1000 == 0:
-        torch.save({'trans' : trans_encoder.state_dict(), 'optimizer': optimizer.state_dict(), 'scheduler': scheduler.state_dict()}, os.path.join(args.out_dir, 'net_last.pth'))
+        
+        save_path = os.path.join(args.out_dir, 'net_last.pth')
+        if os.path.isfile(save_path):
+            os.remove(save_path)
+        
+        torch.save({'trans' : trans_encoder.state_dict(), 'optimizer': optimizer.state_dict(), 'scheduler': scheduler.state_dict(), 'nb_iter': nb_iter}, save_path)
+        
+        new_save_path = os.path.join(args.out_dir, f'net_{nb_iter}.pth')
+        copy_cmd = f'cp "{save_path}" "{new_save_path}"'
+        os.system(copy_cmd)
+        # torch.save({'trans' : trans.state_dict(), 'optimizer': optimizer.state_dict(), 'scheduler': scheduler.state_dict()}, os.path.join(out_dir, f'net_{nb_iter}.pth'))
 
 
     if nb_iter == args.total_iter: 

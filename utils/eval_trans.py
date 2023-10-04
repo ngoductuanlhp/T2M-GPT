@@ -168,9 +168,8 @@ def evaluation_vqvae(out_dir, val_loader, net, logger, writer, nb_iter, best_fid
     net.train()
     return best_fid, best_iter, best_div, best_top1, best_top2, best_top3, best_matching, writer, logger
 
-
 @torch.no_grad()        
-def evaluation_transformer(out_dir, val_loader, net, trans, logger, writer, nb_iter, best_fid, best_iter, best_div, best_top1, best_top2, best_top3, best_matching, clip_model, eval_wrapper, draw = True, save = True, savegif=False, optimizer=None, scheduler=None) : 
+def evaluation_transformer_debug(out_dir, val_loader, net, trans, logger, writer, nb_iter, best_fid, best_iter, best_div, best_top1, best_top2, best_top3, best_matching, clip_model, eval_wrapper, draw = True, save = True, savegif=False, optimizer=None, scheduler=None) : 
 
     trans.eval()
     nb_sample = 0
@@ -190,33 +189,33 @@ def evaluation_transformer(out_dir, val_loader, net, trans, logger, writer, nb_i
     nb_sample = 0
     for i in range(1):
         for batch in val_loader:
-            print('test')
             word_embeddings, pos_one_hots, clip_text, sent_len, pose, m_length, token, name = batch
 
             num_joints = 21 if pose.shape[-1] == 251 else 22
 
-            bs = pose.shape[0]
+            bs, pose_seq = pose.shape[:2]
             seq = 51
 
-            
+            pose = pose.cuda().float() # bs, nb_joints, joints_dim, seq_len
+            ids = net.encode(pose)
 
+            ids = torch.cat([ids, torch.ones((bs, 2), dtype=torch.long, device=ids.device)*(net.vqvae.num_code + 1)], dim=-1)
 
             # bs, seq = gt_ids.shape[:2]
             
             text = clip.tokenize(clip_text, truncate=True).cuda()
 
             feat_clip_text = clip_model.encode_text(text).float()
-            pred_pose_eval = torch.zeros((bs, seq, pose.shape[-1])).cuda()
+            pred_pose_eval = torch.zeros((bs, pose_seq, pose.shape[-1])).cuda()
             pred_len = torch.ones(bs).long()
 
 
             timesteps = 18
             seq_len = seq
 
-            # pose = pose.cuda().float() # bs, nb_joints, joints_dim, seq_len
-            # ids = net.encode(pose)
+            
 
-            ids = torch.full((bs, seq_len), net.vqvae.num_code + 2, dtype = torch.long).cuda()
+            # ids = torch.full((bs, seq_len), net.vqvae.num_code + 2, dtype = torch.long).cuda()
             # ids = gt_ids
             # rand_ = torch.rand((bs, seq_len), dtype = torch.float).cuda()
             # ids[rand_ < 0.3] = net.vqvae.num_code + 2
@@ -229,6 +228,7 @@ def evaluation_transformer(out_dir, val_loader, net, trans, logger, writer, nb_i
             starting_temperature = 0.9
 
             for step in range(timesteps):
+                breakpoint()
                 is_first_step = step == 0
                 is_last_step = step == (timesteps - 1)
 
@@ -244,11 +244,12 @@ def evaluation_transformer(out_dir, val_loader, net, trans, logger, writer, nb_i
 
                 ids = torch.where(mask, net.vqvae.num_code + 2, ids)
 
-                logits = trans.forward_with_cond_scale(ids, feat_clip_text)
+                logits = trans(ids, feat_clip_text, token_mask=None, text_mask=None)
 
 
                 temperature = starting_temperature * (steps_til_x0 / timesteps)
-                pred_ids = gumbel_sample(logits, temperature = temperature)
+                # pred_ids = gumbel_sample(logits, temperature = temperature)
+                pred_ids = logits.argmax(dim=-1)
 
                 ids = torch.where(mask, pred_ids, ids)
 
@@ -258,83 +259,34 @@ def evaluation_transformer(out_dir, val_loader, net, trans, logger, writer, nb_i
                     scores = 1 - rearrange(scores, '... 1 -> ...')
                     scores = torch.where(mask, scores, -1e4)
 
-            # NOTE old inference code 
-            # for timestep, steps_until_x0 in zip(torch.linspace(0, 1, timesteps).cuda(), reversed(range(timesteps))):
-
-            #     rand_mask_prob = cosine_schedule(timestep)
-            #     num_token_masked = max(int((rand_mask_prob * seq_len).item()), 1)
-
-            #     masked_indices = scores.topk(num_token_masked, dim = -1).indices
-
-            #     ids = ids.scatter(1, masked_indices, net.vqvae.num_code + 2)
-
-            #     # NOTE forward model
-            #     logits = trans.forward_with_cond_scale(ids, feat_clip_text)
-
-            #     filtered_logits = top_k(logits, 0.9)
-
-            #     temperature = 1.0 * (steps_until_x0 / timesteps) # temperature is annealed
-
-            #     pred_ids = gumbel_sample(filtered_logits, temperature = temperature, dim = -1)
-
-            #     is_mask = (ids == net.vqvae.num_code + 2)
-
-            #     ids = torch.where(
-            #         is_mask,
-            #         pred_ids,
-            #         ids
-            #     )
-
-            #     use_token_critic = False
-            #     if use_token_critic:
-            #         scores = token_critic_fn(
-            #             ids,
-            #             text_embeds = text_embeds,
-            #             conditioning_token_ids = cond_ids,
-            #             cond_scale = cond_scale
-            #         )
-
-            #         scores = rearrange(scores, '... 1 -> ...')
-
-            #         scores = scores + (uniform(scores.shape, device = device) - 0.5) * critic_noise_scale * (steps_until_x0 / timesteps)
-
-            #     else:
-            #         probs_without_temperature = logits.softmax(dim = -1)
-
-            #         scores = 1 - probs_without_temperature.gather(2, pred_ids[..., None])
-            #         scores = rearrange(scores, '... 1 -> ...')
-
-            #         # if not can_remask_prev_masked:
-            #         scores = scores.masked_fill(~is_mask, -1e5)
-            #         # else:
-            #         #     assert self.no_mask_token_prob > 0., 'without training with some of the non-masked tokens forced to predict, not sure if the logits will be meaningful for these token'
-
-            #     # get ids
-
-            #     # ids = rearrange(ids, 'b (i j) -> b i j', i = fmap_size, j = fmap_size)
-
-
-            # breakpoint()
+ 
             for k in tqdm(range(bs)):
                 # try:
                 #     index_motion = trans.sample(feat_clip_text[k:k+1], False)
                 # except:
                 #     index_motion = torch.ones(1,1).cuda().long()
                 ids_ = ids[k]
+                # breakpoint()
                 try:
                     first_end = torch.nonzero(ids_ == net.vqvae.num_code).view(-1)[0]
                 except:
                     first_end = -1
+                # print('first_end', first_end)
                 ids_ = ids_[:first_end]
+                # breakpoint()
 
-                pred_pose = net.forward_decoder(ids_)
+                pred_pose = net.forward_decoder(ids_[None,:])
+
+                # breakpoint()
                 cur_len = pred_pose.shape[1]
 
-                pred_len[k] = min(cur_len, seq)
+                pred_len[k] = min(cur_len, pose_seq)
+                # pred_len[k] = m_length[k]
                 if pred_len[k] < 4:
                     continue
 
-                pred_pose_eval[k:k+1, :cur_len] = pred_pose[:, :seq]
+                # pred_pose_eval[k:k+1, :pred_len[k]] = pose.cuda()[k:k+1, :pred_len[k]]
+                pred_pose_eval[k:k+1, :pred_len[k]] = pred_pose[:, :pred_len[k]]
 
                 if draw:
                     pred_denorm = val_loader.dataset.inv_transform(pred_pose.detach().cpu().numpy())
@@ -442,8 +394,299 @@ def evaluation_transformer(out_dir, val_loader, net, trans, logger, writer, nb_i
         logger.info(msg)
         best_top3 = R_precision[2]
 
-    if save:
-        torch.save({'trans' : trans.state_dict(), 'optimizer': optimizer.state_dict(), 'scheduler': scheduler.state_dict()}, os.path.join(out_dir, f'net_{nb_iter}.pth'))
+    # if save:
+    #     torch.save({'trans' : trans.state_dict(), 'optimizer': optimizer.state_dict(), 'scheduler': scheduler.state_dict()}, os.path.join(out_dir, f'net_{nb_iter}.pth'))
+
+    trans.train()
+    return best_fid, best_iter, best_div, best_top1, best_top2, best_top3, best_matching, writer, logger
+
+
+
+
+@torch.no_grad()        
+def evaluation_transformer(out_dir, val_loader, net, trans, logger, writer, nb_iter, best_fid, best_iter, best_div, best_top1, best_top2, best_top3, best_matching, clip_model, eval_wrapper, draw = True, save = True, savegif=False, optimizer=None, scheduler=None) : 
+
+    trans.eval()
+    nb_sample = 0
+    
+    draw_org = []
+    draw_pred = []
+    draw_text = []
+    draw_text_pred = []
+
+    motion_annotation_list = []
+    motion_pred_list = []
+    R_precision_real = 0
+    R_precision = 0
+    matching_score_real = 0
+    matching_score_pred = 0
+
+    nb_sample = 0
+    for i in range(1):
+        for batch in val_loader:
+            print('test')
+            word_embeddings, pos_one_hots, clip_text, sent_len, pose, m_length, token, name = batch
+
+            num_joints = 21 if pose.shape[-1] == 251 else 22
+
+            bs, pose_seq = pose.shape[:2]
+            seq = 51
+
+            
+
+
+            # bs, seq = gt_ids.shape[:2]
+            
+            text = clip.tokenize(clip_text, truncate=True).cuda()
+
+            feat_clip_text = clip_model.encode_text(text).float()
+            pred_pose_eval = torch.zeros((bs, pose_seq, pose.shape[-1])).cuda()
+            pred_len = torch.ones(bs).long()
+
+
+            timesteps = 18
+            seq_len = seq
+
+            # pose = pose.cuda().float() # bs, nb_joints, joints_dim, seq_len
+            # ids = net.encode(pose)
+
+            ids = torch.full((bs, seq_len), net.vqvae.num_code + 2, dtype = torch.long).cuda()
+            # ids = gt_ids
+            # rand_ = torch.rand((bs, seq_len), dtype = torch.float).cuda()
+            # ids[rand_ < 0.3] = net.vqvae.num_code + 2
+            # scores = torch.zeros((bs, seq_len), dtype = torch.float32).cuda()
+            mask = torch.ones((bs, seq_len), dtype = torch.bool).cuda()
+            # breakpoint()
+            scores = None
+            num_tokens = 51
+            shape = (bs, num_tokens)
+            starting_temperature = 0.9
+
+            for step in range(timesteps):
+                # breakpoint()
+                is_first_step = step == 0
+                is_last_step = step == (timesteps - 1)
+
+                steps_til_x0 = timesteps - (step + 1)
+
+                if not is_first_step and (scores is not None):
+                    time = torch.full((1,), step / timesteps).cuda()
+                    num_tokens_mask = (num_tokens * torch.cos(time * np.pi * 0.5)).round().long().clamp(min = 1).cuda()
+
+                    _, indices = scores.topk(num_tokens_mask.item(), dim = -1)
+                    # breakpoint()
+                    mask = torch.zeros(shape).cuda().scatter(1, indices, 1).bool()
+
+                ids = torch.where(mask, net.vqvae.num_code + 2, ids)
+
+                logits = trans(ids, feat_clip_text, token_mask=None, text_mask=None)
+
+
+                temperature = starting_temperature * (steps_til_x0 / timesteps)
+                # pred_ids = gumbel_sample(logits, temperature = temperature)
+                pred_ids = logits.argmax(dim=-1)
+
+                ids = torch.where(mask, pred_ids, ids)
+
+                if not is_last_step:
+                    probs = logits.softmax(dim = -1)
+                    scores = probs.gather(2, rearrange(pred_ids, '... -> ... 1'))
+                    scores = 1 - rearrange(scores, '... 1 -> ...')
+                    scores = torch.where(mask, scores, -1e4)
+
+            # NOTE old inference code 
+            # for timestep, steps_until_x0 in zip(torch.linspace(0, 1, timesteps).cuda(), reversed(range(timesteps))):
+
+            #     rand_mask_prob = cosine_schedule(timestep)
+            #     num_token_masked = max(int((rand_mask_prob * seq_len).item()), 1)
+
+            #     masked_indices = scores.topk(num_token_masked, dim = -1).indices
+
+            #     ids = ids.scatter(1, masked_indices, net.vqvae.num_code + 2)
+
+            #     # NOTE forward model
+            #     logits = trans.forward_with_cond_scale(ids, feat_clip_text)
+
+            #     filtered_logits = top_k(logits, 0.9)
+
+            #     temperature = 1.0 * (steps_until_x0 / timesteps) # temperature is annealed
+
+            #     pred_ids = gumbel_sample(filtered_logits, temperature = temperature, dim = -1)
+
+            #     is_mask = (ids == net.vqvae.num_code + 2)
+
+            #     ids = torch.where(
+            #         is_mask,
+            #         pred_ids,
+            #         ids
+            #     )
+
+            #     use_token_critic = False
+            #     if use_token_critic:
+            #         scores = token_critic_fn(
+            #             ids,
+            #             text_embeds = text_embeds,
+            #             conditioning_token_ids = cond_ids,
+            #             cond_scale = cond_scale
+            #         )
+
+            #         scores = rearrange(scores, '... 1 -> ...')
+
+            #         scores = scores + (uniform(scores.shape, device = device) - 0.5) * critic_noise_scale * (steps_until_x0 / timesteps)
+
+            #     else:
+            #         probs_without_temperature = logits.softmax(dim = -1)
+
+            #         scores = 1 - probs_without_temperature.gather(2, pred_ids[..., None])
+            #         scores = rearrange(scores, '... 1 -> ...')
+
+            #         # if not can_remask_prev_masked:
+            #         scores = scores.masked_fill(~is_mask, -1e5)
+            #         # else:
+            #         #     assert self.no_mask_token_prob > 0., 'without training with some of the non-masked tokens forced to predict, not sure if the logits will be meaningful for these token'
+
+            #     # get ids
+
+            #     # ids = rearrange(ids, 'b (i j) -> b i j', i = fmap_size, j = fmap_size)
+
+
+            # breakpoint()
+            for k in tqdm(range(bs)):
+                # try:
+                #     index_motion = trans.sample(feat_clip_text[k:k+1], False)
+                # except:
+                #     index_motion = torch.ones(1,1).cuda().long()
+                ids_ = ids[k]
+                # breakpoint()
+                try:
+                    first_end = torch.nonzero(ids_ == net.vqvae.num_code).view(-1)[0]
+                except:
+                    first_end = -1
+                # print('first_end', first_end)
+                ids_ = ids_[:first_end]
+                # breakpoint()
+
+                pred_pose = net.forward_decoder(ids_[None,:])
+
+                # breakpoint()
+                cur_len = pred_pose.shape[1]
+
+                pred_len[k] = min(cur_len, pose_seq)
+                # pred_len[k] = m_length[k]
+                if pred_len[k] < 4:
+                    continue
+
+                # pred_pose_eval[k:k+1, :pred_len[k]] = pose.cuda()[k:k+1, :pred_len[k]]
+                pred_pose_eval[k:k+1, :pred_len[k]] = pred_pose[:, :pred_len[k]]
+
+                if draw:
+                    pred_denorm = val_loader.dataset.inv_transform(pred_pose.detach().cpu().numpy())
+                    pred_xyz = recover_from_ric(torch.from_numpy(pred_denorm).float().cuda(), num_joints)
+
+                    if i == 0 and k < 4:
+                        draw_pred.append(pred_xyz)
+                        draw_text_pred.append(clip_text[k])
+
+            et_pred, em_pred = eval_wrapper.get_co_embeddings(word_embeddings, pos_one_hots, sent_len, pred_pose_eval, pred_len)
+            
+            if i == 0:
+                pose = pose.cuda().float()
+                
+                et, em = eval_wrapper.get_co_embeddings(word_embeddings, pos_one_hots, sent_len, pose, m_length)
+                motion_annotation_list.append(em)
+                motion_pred_list.append(em_pred)
+
+                if draw:
+                    pose = val_loader.dataset.inv_transform(pose.detach().cpu().numpy())
+                    pose_xyz = recover_from_ric(torch.from_numpy(pose).float().cuda(), num_joints)
+
+
+                    for j in range(min(4, bs)):
+                        draw_org.append(pose_xyz[j][:m_length[j]].unsqueeze(0))
+                        draw_text.append(clip_text[j])
+
+                temp_R, temp_match = calculate_R_precision(et.cpu().numpy(), em.cpu().numpy(), top_k=3, sum_all=True)
+                R_precision_real += temp_R
+                matching_score_real += temp_match
+                temp_R, temp_match = calculate_R_precision(et_pred.cpu().numpy(), em_pred.cpu().numpy(), top_k=3, sum_all=True)
+                R_precision += temp_R
+                matching_score_pred += temp_match
+
+                nb_sample += bs
+
+    motion_annotation_np = torch.cat(motion_annotation_list, dim=0).cpu().numpy()
+    motion_pred_np = torch.cat(motion_pred_list, dim=0).cpu().numpy()
+    gt_mu, gt_cov  = calculate_activation_statistics(motion_annotation_np)
+    mu, cov= calculate_activation_statistics(motion_pred_np)
+
+    diversity_real = calculate_diversity(motion_annotation_np, 300 if nb_sample > 300 else 100)
+    diversity = calculate_diversity(motion_pred_np, 300 if nb_sample > 300 else 100)
+
+    R_precision_real = R_precision_real / nb_sample
+    R_precision = R_precision / nb_sample
+
+    matching_score_real = matching_score_real / nb_sample
+    matching_score_pred = matching_score_pred / nb_sample
+
+
+    fid = calculate_frechet_distance(gt_mu, gt_cov, mu, cov)
+
+    msg = f"--> \t Eva. Iter {nb_iter} :, FID. {fid:.4f}, Diversity Real. {diversity_real:.4f}, Diversity. {diversity:.4f}, R_precision_real. {R_precision_real}, R_precision. {R_precision}, matching_score_real. {matching_score_real}, matching_score_pred. {matching_score_pred}"
+    logger.info(msg)
+    
+    
+    if draw:
+        writer.add_scalar('./Test/FID', fid, nb_iter)
+        writer.add_scalar('./Test/Diversity', diversity, nb_iter)
+        writer.add_scalar('./Test/top1', R_precision[0], nb_iter)
+        writer.add_scalar('./Test/top2', R_precision[1], nb_iter)
+        writer.add_scalar('./Test/top3', R_precision[2], nb_iter)
+        writer.add_scalar('./Test/matching_score', matching_score_pred, nb_iter)
+
+    
+        if nb_iter % 10000 == 0 : 
+            for ii in range(4):
+                tensorborad_add_video_xyz(writer, draw_org[ii], nb_iter, tag='./Vis/org_eval'+str(ii), nb_vis=1, title_batch=[draw_text[ii]], outname=[os.path.join(out_dir, 'gt'+str(ii)+'.gif')] if savegif else None)
+            
+        if nb_iter % 10000 == 0 : 
+            for ii in range(4):
+                tensorborad_add_video_xyz(writer, draw_pred[ii], nb_iter, tag='./Vis/pred_eval'+str(ii), nb_vis=1, title_batch=[draw_text_pred[ii]], outname=[os.path.join(out_dir, 'pred'+str(ii)+'.gif')] if savegif else None)
+
+    
+    if fid < best_fid : 
+        msg = f"--> --> \t FID Improved from {best_fid:.5f} to {fid:.5f} !!!"
+        logger.info(msg)
+        best_fid, best_iter = fid, nb_iter
+        if save:
+            torch.save({'trans' : trans.state_dict()}, os.path.join(out_dir, 'net_best_fid.pth'))
+    
+    if matching_score_pred < best_matching : 
+        msg = f"--> --> \t matching_score Improved from {best_matching:.5f} to {matching_score_pred:.5f} !!!"
+        logger.info(msg)
+        best_matching = matching_score_pred
+
+    if abs(diversity_real - diversity) < abs(diversity_real - best_div) : 
+        msg = f"--> --> \t Diversity Improved from {best_div:.5f} to {diversity:.5f} !!!"
+        logger.info(msg)
+        best_div = diversity
+
+    if R_precision[0] > best_top1 : 
+        msg = f"--> --> \t Top1 Improved from {best_top1:.4f} to {R_precision[0]:.4f} !!!"
+        logger.info(msg)
+        best_top1 = R_precision[0]
+
+    if R_precision[1] > best_top2 : 
+        msg = f"--> --> \t Top2 Improved from {best_top2:.4f} to {R_precision[1]:.4f} !!!"
+        logger.info(msg)
+        best_top2 = R_precision[1]
+    
+    if R_precision[2] > best_top3 : 
+        msg = f"--> --> \t Top3 Improved from {best_top3:.4f} to {R_precision[2]:.4f} !!!"
+        logger.info(msg)
+        best_top3 = R_precision[2]
+
+    # if save:
+    #     torch.save({'trans' : trans.state_dict(), 'optimizer': optimizer.state_dict(), 'scheduler': scheduler.state_dict()}, os.path.join(out_dir, f'net_{nb_iter}.pth'))
 
     trans.train()
     return best_fid, best_iter, best_div, best_top1, best_top2, best_top3, best_matching, writer, logger

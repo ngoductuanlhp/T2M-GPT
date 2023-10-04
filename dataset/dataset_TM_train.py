@@ -115,6 +115,8 @@ class Text2MotionDataset(data.Dataset):
         m_token_list, text_list = data['m_token_list'], data['text']
         m_tokens = random.choice(m_token_list)
 
+        # print(len(m_token_list), m_token_list)
+
         text_data = random.choice(text_list)
         caption = text_data['caption']
 
