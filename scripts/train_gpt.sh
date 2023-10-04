@@ -1,6 +1,6 @@
 CUDA_VISIBLE_DEVICES=$1 python3 train_t2m_trans.py  \
---exp-name GPT_MaskGit_fixmask_fixselfattn_nocross_attn \
---batch-size 256 \
+--exp-name GPT_MaskGit_classifierfree \
+--batch-size 128 \
 --num-layers 9 \
 --embed-dim-gpt 1024 \
 --nb-code 512 \
@@ -8,6 +8,7 @@ CUDA_VISIBLE_DEVICES=$1 python3 train_t2m_trans.py  \
 --block-size 51 \
 --ff-rate 4 \
 --drop-out-rate 0.1 \
+--cond-drop-prob 0.25 \
 --resume-pth pretrained/VQVAE/net_last.pth \
 --vq-name VQVAE \
 --out-dir output \

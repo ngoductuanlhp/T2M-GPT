@@ -66,6 +66,11 @@ net = vqvae.HumanVQVAE(args, ## use args to define different parameters in diffe
                        args.depth,
                        args.dilation_growth_rate)
 
+print ('loading VQ-VAE checkpoint from {}'.format(args.resume_pth))
+ckpt = torch.load(args.resume_pth, map_location='cpu')
+net.load_state_dict(ckpt['net'], strict=True)
+net.eval()
+net.cuda()
 
 trans_encoder = trans.Text2Motion_Transformer(num_vq=args.nb_code, 
                                 embed_dim=args.embed_dim_gpt, 
@@ -77,17 +82,6 @@ trans_encoder = trans.Text2Motion_Transformer(num_vq=args.nb_code,
                                 fc_rate=args.ff_rate,
                                 has_cross_attn= not args.no_cross_attn)
 
-
-print ('loading checkpoint from {}'.format(args.resume_pth))
-ckpt = torch.load(args.resume_pth, map_location='cpu')
-net.load_state_dict(ckpt['net'], strict=True)
-net.eval()
-net.cuda()
-
-if args.resume_trans is not None:
-    print ('loading transformer checkpoint from {}'.format(args.resume_trans))
-    ckpt = torch.load(args.resume_trans, map_location='cpu')
-    trans_encoder.load_state_dict(ckpt['trans'], strict=True)
 trans_encoder.train()
 trans_encoder.cuda()
 
@@ -102,22 +96,19 @@ nb_iter, avg_loss_cls, avg_acc = 0, 0., 0.
 right_num = 0
 nb_sample_train = 0
 
-##### ---- get code ---- #####
+if args.resume_trans is not None:
+    print ('loading transformer checkpoint from {}'.format(args.resume_trans))
+    ckpt = torch.load(args.resume_trans, map_location='cpu')
+    trans_encoder.load_state_dict(ckpt['trans'], strict=True)
 
-##### ---- Dataloader ---- #####
-# if not os.path.exists('dataset/HumanML3D/VQVAE/000002.npy'):
-#     train_loader_token = dataset_tokenize.DATALoader(args.dataname, 1, unit_length=2**args.down_t)
-#     for batch in tqdm(train_loader_token):
-#         pose, name = batch
-#         # if os.path.exists(pjoin(args.vq_dir, name[0] +'.npy')):
-#         #     break
+    if "optimizer" in ckpt.keys():
+        optimizer.load_state_dict(ckpt["optimizer"])
+    
+    if "scheduler" in ckpt.keys():
+        scheduler.load_state_dict(ckpt["scheduler"])
 
-#         bs, seq = pose.shape[0], pose.shape[1]
-
-#         pose = pose.cuda().float() # bs, nb_joints, joints_dim, seq_len
-#         target = net.encode(pose)
-#         target = target.cpu().numpy()
-#         np.save(pjoin(args.vq_dir, name[0] +'.npy'), target)
+    if "nb_iter" in ckpt.keys():
+        nb_iter = ckpt["nb_iter"]
 
 
 train_loader = dataset_TM_train.DATALoader(args.dataname, args.batch_size, args.nb_code, args.vq_name, unit_length=2**args.down_t, num_workers=8, split=args.split)
@@ -136,6 +127,26 @@ best_top2=0
 best_top3=0
 best_matching=100
 
+# best_fid, best_iter, best_div, best_top1, best_top2, best_top3, best_matching, writer, logger = \
+#         eval_trans.evaluation_transformer(
+#             args.out_dir, 
+#             val_loader, 
+#             net, 
+#             trans_encoder, 
+#             logger, 
+#             writer, 
+#             nb_iter, 
+#             best_fid, 
+#             best_iter, 
+#             best_div, 
+#             best_top1, 
+#             best_top2, 
+#             best_top3, 
+#             best_matching, 
+#             clip_model=clip_model, eval_wrapper=eval_wrapper, optimizer=optimizer, scheduler=scheduler)
+
+
+
 print('Start training')
 while nb_iter <= args.total_iter:
     # print(nb_iter)
@@ -153,8 +164,9 @@ while nb_iter <= args.total_iter:
     
     feat_clip_text = clip_model.encode_text(text).float()
 
+    text_mask = torch.ones_like(mask_token)
     if args.cond_drop_prob > 0:
-        keep_mask = prob_mask_like((b,), 1 - args.cond_drop_prob, device = device)
+        keep_mask = prob_mask_like((bs,), 1 - args.cond_drop_prob, device = text_mask.device)
         text_mask = rearrange(keep_mask, 'b -> b 1') & text_mask
 
     input_index = target

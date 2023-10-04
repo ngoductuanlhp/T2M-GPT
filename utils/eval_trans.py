@@ -195,7 +195,7 @@ def evaluation_transformer(out_dir, val_loader, net, trans, logger, writer, nb_i
 
             num_joints = 21 if pose.shape[-1] == 251 else 22
 
-            bs = clip_text.shape[0]
+            bs = pose.shape[0]
             seq = 51
             # pose = pose.cuda().float() # bs, nb_joints, joints_dim, seq_len
             # gt_ids = net.encode(pose)
@@ -221,7 +221,7 @@ def evaluation_transformer(out_dir, val_loader, net, trans, logger, writer, nb_i
             token_mask = torch.ones((bs, seq_len), dtype = torch.bool).cuda()
             # breakpoint()
 
-            for timestep, steps_until_x0 in tqdm(zip(torch.linspace(0, 1, timesteps).cuda(), reversed(range(timesteps))), total = timesteps):
+            for timestep, steps_until_x0 in zip(torch.linspace(0, 1, timesteps).cuda(), reversed(range(timesteps))):
 
                 rand_mask_prob = cosine_schedule(timestep)
                 num_token_masked = max(int((rand_mask_prob * seq_len).item()), 1)
@@ -230,7 +230,8 @@ def evaluation_transformer(out_dir, val_loader, net, trans, logger, writer, nb_i
 
                 ids = ids.scatter(1, masked_indices, net.vqvae.num_code + 2)
 
-                logits = trans(ids, feat_clip_text, token_mask)
+                # NOTE forward model
+                logits = trans.forward_with_cond_scale(ids, feat_clip_text)
 
                 filtered_logits = top_k(logits, 0.9)
 
@@ -292,6 +293,9 @@ def evaluation_transformer(out_dir, val_loader, net, trans, logger, writer, nb_i
                 cur_len = pred_pose.shape[1]
 
                 pred_len[k] = min(cur_len, seq)
+                if pred_len[k] < 4:
+                    continue
+
                 pred_pose_eval[k:k+1, :cur_len] = pred_pose[:, :seq]
 
                 if draw:
