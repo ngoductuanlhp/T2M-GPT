@@ -23,4 +23,4 @@ CUDA_VISIBLE_DEVICES=$1 python3 GPT_eval.py  \
 --pkeep 0.5 \
 --dilation-growth-rate 3 \
 --vq-act relu \
---resume-trans output/GPT_MaskGit_fixbug_mask/net_last.pth
+--resume-trans output/GPT_MaskGit_classifierfree/net_last.pth

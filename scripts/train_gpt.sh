@@ -1,5 +1,5 @@
 CUDA_VISIBLE_DEVICES=$1 python3 train_t2m_trans.py  \
---exp-name GPT_MaskGit_classifierfree \
+--exp-name GPT_MaskGit_classifierfree_prob0.5 \
 --batch-size 128 \
 --num-layers 9 \
 --embed-dim-gpt 1024 \

@@ -193,6 +193,9 @@ while nb_iter <= args.total_iter:
     # get_mask_subset_with_prob
     rand_step = torch.randint(0, 18, (bs,)).cuda() / 18.
     mask_token_prob = torch.cos(rand_step * np.pi * 0.5) # cosine schedule was best
+
+    # FIXME scale prob to only 0.0 - > 0.25 
+    mask_token_prob = mask_token_prob * 0.5
     num_token_masked = (m_tokens_len * mask_token_prob).round().clamp(min = 1)
     # mask_id = self.mask_id
     # batch_randperm = torch.rand((bs, seq_len), device = device).argsort(dim = -1)
