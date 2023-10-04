@@ -19,8 +19,8 @@ def tensorborad_add_video_xyz(writer, xyz, nb_iter, tag, nb_vis=4, title_batch=N
     xyz = xyz[:1]
     bs, seq = xyz.shape[:2]
     xyz = xyz.reshape(bs, seq, -1, 3)
-    plot_xyz = draw_to_batch(xyz.cpu().numpy(),title_batch, outname)
-    plot_xyz =np.transpose(plot_xyz, (0, 1, 4, 2, 3)) 
+    plot_xyz = plot_3d.draw_to_batch(xyz.cpu().numpy(),title_batch, outname)
+    plot_xyz = np.transpose(plot_xyz, (0, 1, 4, 2, 3)) 
     writer.add_video(tag, plot_xyz, nb_iter, fps = 20)
 
 @torch.no_grad()        
@@ -197,7 +197,7 @@ def evaluation_transformer(out_dir, val_loader, net, trans, logger, writer, nb_i
 
             num_joints = 21 if pose.shape[-1] == 251 else 22
 
-            bs = clip_text.shape[0]
+            bs = pose.shape[0]
             seq = 51
             # pose = pose.cuda().float() # bs, nb_joints, joints_dim, seq_len
             # gt_ids = net.encode(pose)
@@ -403,7 +403,7 @@ def evaluation_transformer(out_dir, val_loader, net, trans, logger, writer, nb_i
         best_top3 = R_precision[2]
 
     if save:
-        torch.save({'trans' : trans.state_dict(), 'optimizer': optimizer.state_dict(), 'scheduler': scheduler.state_dict()}, os.path.join(out_dir, f'net_{nb_iter}.pth'))
+        torch.save({'trans' : trans.state_dict(), 'optimizer': optimizer.state_dict(), 'scheduler': scheduler.state_dict(), 'nb_iter': nb_iter}, os.path.join(out_dir, f'net_{nb_iter}.pth'))
 
     trans.train()
     return best_fid, best_iter, best_div, best_top1, best_top2, best_top3, best_matching, writer, logger

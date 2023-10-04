@@ -66,6 +66,11 @@ net = vqvae.HumanVQVAE(args, ## use args to define different parameters in diffe
                        args.depth,
                        args.dilation_growth_rate)
 
+print ('loading VQ-VAE checkpoint from {}'.format(args.resume_pth))
+ckpt = torch.load(args.resume_pth, map_location='cpu')
+net.load_state_dict(ckpt['net'], strict=True)
+net.eval()
+net.cuda()
 
 trans_encoder = trans.Text2Motion_Transformer(num_vq=args.nb_code, 
                                 embed_dim=args.embed_dim_gpt, 
@@ -77,17 +82,6 @@ trans_encoder = trans.Text2Motion_Transformer(num_vq=args.nb_code,
                                 fc_rate=args.ff_rate,
                                 has_cross_attn= not args.no_cross_attn)
 
-
-print ('loading checkpoint from {}'.format(args.resume_pth))
-ckpt = torch.load(args.resume_pth, map_location='cpu')
-net.load_state_dict(ckpt['net'], strict=True)
-net.eval()
-net.cuda()
-
-if args.resume_trans is not None:
-    print ('loading transformer checkpoint from {}'.format(args.resume_trans))
-    ckpt = torch.load(args.resume_trans, map_location='cpu')
-    trans_encoder.load_state_dict(ckpt['trans'], strict=True)
 trans_encoder.train()
 trans_encoder.cuda()
 
@@ -95,12 +89,30 @@ trans_encoder.cuda()
 optimizer = utils_model.initial_optim(args.decay_option, args.lr, args.weight_decay, trans_encoder, args.optimizer)
 scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=args.lr_scheduler, gamma=args.gamma)
 
+
+
+
 ##### ---- Optimization goals ---- #####
 loss_ce = torch.nn.CrossEntropyLoss(ignore_index=-100, reduction='none')
 
 nb_iter, avg_loss_cls, avg_acc = 0, 0., 0.
 right_num = 0
 nb_sample_train = 0
+
+if args.resume_trans is not None:
+    print ('loading transformer checkpoint from {}'.format(args.resume_trans))
+    ckpt = torch.load(args.resume_trans, map_location='cpu')
+    trans_encoder.load_state_dict(ckpt['trans'], strict=True)
+
+    if "optimizer" in ckpt.keys():
+        optimizer.load_state_dict(ckpt["optimizer"])
+    
+    if "scheduler" in ckpt.keys():
+        scheduler.load_state_dict(ckpt["scheduler"])
+
+    
+    if "nb_iter" in ckpt.keys():
+        nb_iter = ckpt["nb_iter"]
 
 ##### ---- get code ---- #####
 
@@ -302,7 +314,7 @@ while nb_iter <= args.total_iter:
 
 
     if nb_iter % 1000 == 0:
-        torch.save({'trans' : trans_encoder.state_dict(), 'optimizer': optimizer.state_dict(), 'scheduler': scheduler.state_dict()}, os.path.join(args.out_dir, 'net_last.pth'))
+        torch.save({'trans' : trans_encoder.state_dict(), 'optimizer': optimizer.state_dict(), 'scheduler': scheduler.state_dict(), 'nb_iter': nb_iter}, os.path.join(args.out_dir, 'net_last.pth'))
 
 
     if nb_iter == args.total_iter: 
