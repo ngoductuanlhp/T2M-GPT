@@ -195,7 +195,7 @@ def evaluation_transformer(out_dir, val_loader, net, trans, logger, writer, nb_i
 
             num_joints = 21 if pose.shape[-1] == 251 else 22
 
-            bs = clip_text.shape[0]
+            bs = pose.shape[0]
             seq = 51
             # pose = pose.cuda().float() # bs, nb_joints, joints_dim, seq_len
             # gt_ids = net.encode(pose)
@@ -292,6 +292,9 @@ def evaluation_transformer(out_dir, val_loader, net, trans, logger, writer, nb_i
                 cur_len = pred_pose.shape[1]
 
                 pred_len[k] = min(cur_len, seq)
+                if pred_len[k] < 4:
+                    continue
+            
                 pred_pose_eval[k:k+1, :cur_len] = pred_pose[:, :seq]
 
                 if draw:
@@ -401,7 +404,7 @@ def evaluation_transformer(out_dir, val_loader, net, trans, logger, writer, nb_i
         best_top3 = R_precision[2]
 
     if save:
-        torch.save({'trans' : trans.state_dict(), 'optimizer': optimizer.state_dict(), 'scheduler': scheduler.state_dict()}, os.path.join(out_dir, f'net_{nb_iter}.pth'))
+        torch.save({'trans' : trans.state_dict(), 'optimizer': optimizer.state_dict(), 'scheduler': scheduler.state_dict(), 'nb_iter': nb_iter}, os.path.join(out_dir, f'net_{nb_iter}.pth'))
 
     trans.train()
     return best_fid, best_iter, best_div, best_top1, best_top2, best_top3, best_matching, writer, logger

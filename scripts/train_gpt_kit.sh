@@ -22,4 +22,5 @@ CUDA_VISIBLE_DEVICES=$1 python3 train_t2m_trans.py  \
 --eval-iter 5000 \
 --pkeep 0.5 \
 --dilation-growth-rate 3 \
---vq-act relu
+--vq-act relu \
+--resume-trans output/GPT_MaskGit_fixmask_fixselfattn_KIT/net_last.pth

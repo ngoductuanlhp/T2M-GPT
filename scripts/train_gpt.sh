@@ -1,5 +1,5 @@
 CUDA_VISIBLE_DEVICES=$1 python3 train_t2m_trans.py  \
---exp-name GPT_MaskGit_fixmask_fixselfattn_nocross_attn \
+--exp-name GPT_MaskGit \
 --batch-size 256 \
 --num-layers 9 \
 --embed-dim-gpt 1024 \
@@ -22,4 +22,5 @@ CUDA_VISIBLE_DEVICES=$1 python3 train_t2m_trans.py  \
 --eval-iter 5000 \
 --pkeep 0.5 \
 --dilation-growth-rate 3 \
---vq-act relu
+--vq-act relu \
+--resume-trans output/GPT_MaskGit/net_last.pth
