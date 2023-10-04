@@ -189,7 +189,6 @@ def evaluation_transformer(out_dir, val_loader, net, trans, logger, writer, nb_i
     nb_sample = 0
     for i in range(1):
         for batch in val_loader:
-            print('test')
             word_embeddings, pos_one_hots, clip_text, sent_len, pose, m_length, token, name = batch
 
             bs, seq = pose.shape[:2]
@@ -206,12 +205,20 @@ def evaluation_transformer(out_dir, val_loader, net, trans, logger, writer, nb_i
                     index_motion = trans.sample(feat_clip_text[k:k+1], False)
                 except:
                     index_motion = torch.ones(1,1).cuda().long()
+                # pose = pose.cuda().float() # bs, nb_joints, joints_dim, seq_len
+            # ids = net.encode(pose)
+                # index_motion = net.encode(pose[k:k+1].cuda().float())
 
                 pred_pose = net.forward_decoder(index_motion)
+                # pred_pose = pose[k:k+1].cuda().float()
                 cur_len = pred_pose.shape[1]
 
                 pred_len[k] = min(cur_len, seq)
-                pred_pose_eval[k:k+1, :cur_len] = pred_pose[:, :seq]
+                pred_pose_eval[k:k+1, :cur_len] = pred_pose[:, :cur_len]
+                
+                # pred_pose = pose[k:k+1].cuda().float()
+                # pred_len[k] = m_length[k]
+                # pred_pose_eval[k:k+1, :m_length[k]] = pred_pose[:, :m_length[k]]
 
                 if draw:
                     pred_denorm = val_loader.dataset.inv_transform(pred_pose.detach().cpu().numpy())
