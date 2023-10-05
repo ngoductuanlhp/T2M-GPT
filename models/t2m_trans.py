@@ -240,6 +240,7 @@ class Attention(nn.Module):
                 mask = rearrange(mask, 'b j -> b 1 j 1')
             else:
                 mask = rearrange(mask, 'b j -> b 1 1 j')
+            # mask = rearrange(mask, 'b j -> b 1 j 1')
             att = att.masked_fill(~mask, -torch.finfo(att.dtype).max)
         # att = att.masked_fill(self.mask[:,:,:T,:T] == 0, float('-inf'))
         att = F.softmax(att, dim=-1)

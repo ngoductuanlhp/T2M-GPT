@@ -44,9 +44,10 @@ args = option_trans.get_args_parser()
 torch.manual_seed(args.seed)
 
 args.out_dir = os.path.join(args.out_dir, f'{args.exp_name}')
-args.vq_dir= os.path.join("./dataset/KIT-ML" if args.dataname == 'kit' else "./dataset/HumanML3D", f'{args.vq_name}')
 os.makedirs(args.out_dir, exist_ok = True)
-os.makedirs(args.vq_dir, exist_ok = True)
+
+# args.vq_dir= os.path.join("./dataset/KIT-ML" if args.dataname == 'kit' else "./dataset/HumanML3D", f'{args.vq_name}')
+# os.makedirs(args.vq_dir, exist_ok = True)
 
 ##### ---- Logger ---- #####
 logger = utils_model.get_logger(args.out_dir)
