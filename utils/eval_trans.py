@@ -194,12 +194,12 @@ def evaluation_transformer_debug(out_dir, val_loader, net, trans, logger, writer
             num_joints = 21 if pose.shape[-1] == 251 else 22
 
             bs, pose_seq = pose.shape[:2]
-            seq = 51
+            seq = 50
 
             pose = pose.cuda().float() # bs, nb_joints, joints_dim, seq_len
-            ids = net.encode(pose)
+            gt_ids = net.encode(pose)
 
-            ids = torch.cat([ids, torch.ones((bs, 2), dtype=torch.long, device=ids.device)*(net.vqvae.num_code + 1)], dim=-1)
+            # ids = torch.cat([ids, torch.ones((bs, 2), dtype=torch.long, device=ids.device)*(net.vqvae.num_code + 1)], dim=-1)
 
             # bs, seq = gt_ids.shape[:2]
             
@@ -215,7 +215,7 @@ def evaluation_transformer_debug(out_dir, val_loader, net, trans, logger, writer
 
             
 
-            # ids = torch.full((bs, seq_len), net.vqvae.num_code + 2, dtype = torch.long).cuda()
+            ids = torch.full((bs, seq_len), net.vqvae.num_code + 2, dtype = torch.long).cuda()
             # ids = gt_ids
             # rand_ = torch.rand((bs, seq_len), dtype = torch.float).cuda()
             # ids[rand_ < 0.3] = net.vqvae.num_code + 2
@@ -223,12 +223,12 @@ def evaluation_transformer_debug(out_dir, val_loader, net, trans, logger, writer
             mask = torch.ones((bs, seq_len), dtype = torch.bool).cuda()
             # breakpoint()
             scores = None
-            num_tokens = 51
+            num_tokens = seq
             shape = (bs, num_tokens)
             starting_temperature = 0.9
 
             for step in range(timesteps):
-                breakpoint()
+                # breakpoint()
                 is_first_step = step == 0
                 is_last_step = step == (timesteps - 1)
 
@@ -251,6 +251,7 @@ def evaluation_transformer_debug(out_dir, val_loader, net, trans, logger, writer
                 # pred_ids = gumbel_sample(logits, temperature = temperature)
                 pred_ids = logits.argmax(dim=-1)
 
+
                 ids = torch.where(mask, pred_ids, ids)
 
                 if not is_last_step:
@@ -259,6 +260,12 @@ def evaluation_transformer_debug(out_dir, val_loader, net, trans, logger, writer
                     scores = 1 - rearrange(scores, '... 1 -> ...')
                     scores = torch.where(mask, scores, -1e4)
 
+
+                    # print(probs[pred_ids==512])
+
+            acc = (gt_ids==ids[:, :-1]).sum()/ torch.numel(gt_ids)
+
+            print('acc', acc)
  
             for k in tqdm(range(bs)):
                 # try:
@@ -424,19 +431,14 @@ def evaluation_transformer(out_dir, val_loader, net, trans, logger, writer, nb_i
     nb_sample = 0
     for i in range(1):
         for batch in val_loader:
-            print('test')
+            # print('test')
             word_embeddings, pos_one_hots, clip_text, sent_len, pose, m_length, token, name = batch
 
             num_joints = 21 if pose.shape[-1] == 251 else 22
 
             bs, pose_seq = pose.shape[:2]
-            seq = 51
+            seq = 50
 
-            
-
-
-            # bs, seq = gt_ids.shape[:2]
-            
             text = clip.tokenize(clip_text, truncate=True).cuda()
 
             feat_clip_text = clip_model.encode_text(text).float()
@@ -458,7 +460,7 @@ def evaluation_transformer(out_dir, val_loader, net, trans, logger, writer, nb_i
             mask = torch.ones((bs, seq_len), dtype = torch.bool).cuda()
             # breakpoint()
             scores = None
-            num_tokens = 51
+            num_tokens = seq
             shape = (bs, num_tokens)
             starting_temperature = 0.9
 
@@ -479,12 +481,13 @@ def evaluation_transformer(out_dir, val_loader, net, trans, logger, writer, nb_i
 
                 ids = torch.where(mask, net.vqvae.num_code + 2, ids)
 
-                logits = trans(ids, feat_clip_text, token_mask=None, text_mask=None)
+                # logits = trans(ids, feat_clip_text, token_mask=None, text_mask=None)
+                logits = trans.forward_with_cond_scale(ids, feat_clip_text, token_mask=None, text_mask=None)
 
 
                 temperature = starting_temperature * (steps_til_x0 / timesteps)
-                # pred_ids = gumbel_sample(logits, temperature = temperature)
-                pred_ids = logits.argmax(dim=-1)
+                pred_ids = gumbel_sample(logits, temperature = temperature)
+                # pred_ids = logits.argmax(dim=-1)
 
                 ids = torch.where(mask, pred_ids, ids)
 
@@ -494,77 +497,13 @@ def evaluation_transformer(out_dir, val_loader, net, trans, logger, writer, nb_i
                     scores = 1 - rearrange(scores, '... 1 -> ...')
                     scores = torch.where(mask, scores, -1e4)
 
-            # NOTE old inference code 
-            # for timestep, steps_until_x0 in zip(torch.linspace(0, 1, timesteps).cuda(), reversed(range(timesteps))):
-
-            #     rand_mask_prob = cosine_schedule(timestep)
-            #     num_token_masked = max(int((rand_mask_prob * seq_len).item()), 1)
-
-            #     masked_indices = scores.topk(num_token_masked, dim = -1).indices
-
-            #     ids = ids.scatter(1, masked_indices, net.vqvae.num_code + 2)
-
-            #     # NOTE forward model
-            #     logits = trans.forward_with_cond_scale(ids, feat_clip_text)
-
-            #     filtered_logits = top_k(logits, 0.9)
-
-            #     temperature = 1.0 * (steps_until_x0 / timesteps) # temperature is annealed
-
-            #     pred_ids = gumbel_sample(filtered_logits, temperature = temperature, dim = -1)
-
-            #     is_mask = (ids == net.vqvae.num_code + 2)
-
-            #     ids = torch.where(
-            #         is_mask,
-            #         pred_ids,
-            #         ids
-            #     )
-
-            #     use_token_critic = False
-            #     if use_token_critic:
-            #         scores = token_critic_fn(
-            #             ids,
-            #             text_embeds = text_embeds,
-            #             conditioning_token_ids = cond_ids,
-            #             cond_scale = cond_scale
-            #         )
-
-            #         scores = rearrange(scores, '... 1 -> ...')
-
-            #         scores = scores + (uniform(scores.shape, device = device) - 0.5) * critic_noise_scale * (steps_until_x0 / timesteps)
-
-            #     else:
-            #         probs_without_temperature = logits.softmax(dim = -1)
-
-            #         scores = 1 - probs_without_temperature.gather(2, pred_ids[..., None])
-            #         scores = rearrange(scores, '... 1 -> ...')
-
-            #         # if not can_remask_prev_masked:
-            #         scores = scores.masked_fill(~is_mask, -1e5)
-            #         # else:
-            #         #     assert self.no_mask_token_prob > 0., 'without training with some of the non-masked tokens forced to predict, not sure if the logits will be meaningful for these token'
-
-            #     # get ids
-
-            #     # ids = rearrange(ids, 'b (i j) -> b i j', i = fmap_size, j = fmap_size)
-
-
-            # breakpoint()
             for k in tqdm(range(bs)):
-                # try:
-                #     index_motion = trans.sample(feat_clip_text[k:k+1], False)
-                # except:
-                #     index_motion = torch.ones(1,1).cuda().long()
                 ids_ = ids[k]
-                # breakpoint()
                 try:
                     first_end = torch.nonzero(ids_ == net.vqvae.num_code).view(-1)[0]
                 except:
                     first_end = -1
-                # print('first_end', first_end)
                 ids_ = ids_[:first_end]
-                # breakpoint()
 
                 pred_pose = net.forward_decoder(ids_[None,:])
 

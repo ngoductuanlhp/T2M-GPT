@@ -36,6 +36,8 @@ class Text2MotionDataset(data.Dataset):
             self.max_motion_length = 26 if unit_length == 8 else 51
             dim_pose = 263
             kinematic_chain = paramUtil.t2m_kinematic_chain
+            self.meta_dir = 'checkpoints/t2m/VQVAEV3_CB1024_CMT_H1024_NRES3/meta'
+
         elif dataset_name == 'kit':
             self.data_root = './dataset/KIT-ML'
             self.motion_dir = pjoin(self.data_root, 'new_joint_vecs')
@@ -46,8 +48,12 @@ class Text2MotionDataset(data.Dataset):
             dim_pose = 251
             self.max_motion_length = 26 if unit_length == 8 else 51
             kinematic_chain = paramUtil.kit_kinematic_chain
+            self.meta_dir = 'checkpoints/kit/VQVAEV3_CB1024_CMT_H1024_NRES3/meta'
 
         split_file = pjoin(self.data_root, f'{split}.txt')
+
+        self.mean = np.load(pjoin(self.meta_dir, 'mean.npy'))
+        self.std = np.load(pjoin(self.meta_dir, 'std.npy'))
 
 
         id_list = []
@@ -107,6 +113,10 @@ class Text2MotionDataset(data.Dataset):
 
     def __len__(self):
         return len(self.data_dict)
+    
+
+    def inv_transform(self, data):
+        return data * self.std + self.mean
 
     def __getitem__(self, item):
 
@@ -139,11 +149,16 @@ class Text2MotionDataset(data.Dataset):
         if m_tokens_len+1 < self.max_motion_length:
             m_tokens = np.concatenate([m_tokens, np.ones((1), dtype=int) * self.mot_end_idx, np.ones((self.max_motion_length-1-m_tokens_len), dtype=int) * self.mot_pad_idx], axis=0)
         else:
+            # quit()
             m_tokens = np.concatenate([m_tokens, np.ones((1), dtype=int) * self.mot_end_idx], axis=0)
 
         mask_token = np.ones((m_tokens.shape[0]), dtype=bool)
         mask_token[m_tokens_len+1:] = 0
-        return caption, m_tokens.reshape(-1), m_tokens_len, mask_token
+
+        m_tokens = m_tokens.reshape(-1)
+
+        # print('dataloader', m_tokens.shape)
+        return caption, m_tokens, m_tokens_len, mask_token
 
 
 

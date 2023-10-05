@@ -41,7 +41,7 @@ logger.info(json.dumps(vars(args), indent=4, sort_keys=True))
 
 from utils.word_vectorizer import WordVectorizer
 w_vectorizer = WordVectorizer('./glove', 'our_vab')
-val_loader = dataset_TM_eval.DATALoader(args.dataname, False, 32, w_vectorizer, split=args.split)
+val_loader = dataset_TM_eval.DATALoader(args.dataname, False, args.batch_size, w_vectorizer, split=args.split)
 
 dataset_opt_path = 'checkpoints/kit/Comp_v6_KLD005/opt.txt' if args.dataname == 'kit' else 'checkpoints/t2m/Comp_v6_KLD005/opt.txt'
 
@@ -65,7 +65,6 @@ net = vqvae.HumanVQVAE(args, ## use args to define different parameters in diffe
                        args.depth,
                        args.dilation_growth_rate)
 
-
 trans_encoder = trans.Text2Motion_Transformer(num_vq=args.nb_code, 
                                 embed_dim=args.embed_dim_gpt, 
                                 clip_dim=args.clip_dim, 
@@ -73,7 +72,8 @@ trans_encoder = trans.Text2Motion_Transformer(num_vq=args.nb_code,
                                 num_layers=args.num_layers, 
                                 n_head=args.n_head_gpt, 
                                 drop_out_rate=args.drop_out_rate, 
-                                fc_rate=args.ff_rate)
+                                fc_rate=args.ff_rate,
+                                has_cross_attn= not args.no_cross_attn)
 
 
 print ('loading checkpoint from {}'.format(args.resume_pth))

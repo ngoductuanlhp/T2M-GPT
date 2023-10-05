@@ -1,7 +1,7 @@
 CUDA_VISIBLE_DEVICES=$1 python3 GPT_eval.py  \
---exp-name VAL_GPT_debug \
---batch-size 16 \
---num-layers 9 \
+--exp-name VAL_GPT_MaskGit_classifierfree_debug \
+--batch-size 32 \
+--num-layers 18 \
 --embed-dim-gpt 1024 \
 --nb-code 512 \
 --n-head-gpt 16 \
@@ -23,4 +23,4 @@ CUDA_VISIBLE_DEVICES=$1 python3 GPT_eval.py  \
 --pkeep 0.5 \
 --dilation-growth-rate 3 \
 --vq-act relu \
---resume-trans output/GPT_MaskGit_classifierfree_prob0.5/net_15000.pth
+--resume-trans output/GPT_MaskGit_classifierfree_trainsmall_new_vae_token/net_1000.pth

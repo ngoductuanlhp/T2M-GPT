@@ -5,6 +5,7 @@ from torch.nn import functional as F
 from torch.distributions import Categorical
 import models.pos_encoding as pos_encoding
 from einops import rearrange, einsum
+# from models.attention import Attention, FeedForward
 
 def prob_mask_like(shape, prob, device):
     if prob == 1:
@@ -55,6 +56,15 @@ def get_mask_subset_with_prob(mask, prob):
     mask_subset = randperm_indices < rearrange(num_masked, 'b -> b 1')
     return mask_subset
 
+class LayerNorm(nn.Module):
+    def __init__(self, dim):
+        super().__init__()
+        self.gamma = nn.Parameter(torch.ones(dim))
+        self.register_buffer("beta", torch.zeros(dim))
+
+    def forward(self, x):
+        return F.layer_norm(x, x.shape[-1:], self.gamma, self.beta)
+
 class Text2Motion_Transformer(nn.Module):
 
     def __init__(self, 
@@ -69,23 +79,77 @@ class Text2Motion_Transformer(nn.Module):
                 has_cross_attn=True):
         super().__init__()
 
-        self.transformer = CrossCondTransformer(num_vq, embed_dim, clip_dim, block_size, num_layers*2, n_head, drop_out_rate, fc_rate, has_cross_attn=has_cross_attn)
+        self.has_cross_attn = has_cross_attn
+        self.tok_emb = nn.Embedding(num_vq+3, embed_dim)
+        self.cond_emb = nn.Linear(clip_dim, embed_dim)
+        self.pos_embed = pos_encoding.PositionEmbedding(block_size, embed_dim, 0.0, False)
+        # self.pos_embedding = nn.Embedding(block_size, embed_dim)
+        # self.drop = nn.Dropout(drop_out_rate)
+        # transformer block
+        # self.blocks = nn.ModuleList([Block(embed_dim, block_size, n_head, drop_out_rate, fc_rate, has_cross_attn=has_cross_attn) for _ in range(num_layers)])
+        # self.blocks = nn.ModuleList([Block(embed_dim, block_size, n_head, drop_out_rate, fc_rate) for _ in range(num_layers)])
+        self.blocks = nn.ModuleList([])
+        for l in range(num_layers):
+            self.blocks.append(nn.ModuleList([
+                Attention(embed_dim=embed_dim, block_size=block_size, n_head=n_head, drop_out_rate=0.0, norm_context=False),
+                Attention(embed_dim=embed_dim, block_size=block_size, n_head=n_head, drop_out_rate=0.0, norm_context=True),
+                nn.Sequential(
+                    nn.LayerNorm(embed_dim),
+                    nn.Linear(embed_dim, fc_rate * embed_dim),
+                    nn.GELU(),
+                    nn.Dropout(drop_out_rate),
+                    nn.Linear(fc_rate * embed_dim, embed_dim),
+                )
+            ]))
+
+        self.ln_f = nn.LayerNorm(embed_dim)
+        self.head = nn.Linear(embed_dim, num_vq+1, bias=False)
         self.block_size = block_size
-        self.num_vq = num_vq
+
+        # self.transformer = CrossCondTransformer(num_vq, embed_dim, clip_dim, block_size, num_layers*2, n_head, drop_out_rate, fc_rate, has_cross_attn=has_cross_attn)
+        # self.block_size = block_size
+        # self.num_vq = num_vq
+
+        # print(len(self.blocks))
 
     def get_block_size(self):
         return self.block_size
 
-    def forward(self, idxs, clip_feature, token_mask, text_mask):
+    def forward(self, idxs, clip_feature, token_mask=None, text_mask=None):
+        token_embeddings = self.tok_emb(idxs)
+        context_embeddings = self.cond_emb(clip_feature).unsqueeze(1)
+        # token_embeddings = torch.cat([self.cond_emb(clip_feature).unsqueeze(1), token_embeddings], dim=1)
+        
+        x = self.pos_embed(token_embeddings)
+        # x = token_embeddings
 
-        # breakpoint()
-        logits = self.transformer(idxs, clip_feature, token_mask=token_mask, text_mask=text_mask)
-        # logits = self.trans_head(feat)
+        # NOTE Add text condition to queries 
+        # if not self.has_cross_attn:
+        #     x = x + context_embeddings
+
+        for (self_attn, cross_attn, ff) in self.blocks:
+            x = self_attn(x, mask=token_mask) + x
+
+            x = cross_attn(x, context=context_embeddings, mask=text_mask) + x
+
+            x = ff(x) + x
+
+            # x = block(x, context=context_embeddings, self_attn_mask=token_mask, cross_attn_mask=text_mask)
+
+        x = self.ln_f(x)
+        logits = self.head(x)
         return logits
+    
+        # breakpoint()
+        # logits = self.transformer(idxs, clip_feature, token_mask=token_mask, text_mask=text_mask)
+        # # logits = self.trans_head(feat)
+        # return logits
     
     def forward_with_cond_scale(
         self,
         idxs, clip_feature,
+        token_mask=None, 
+        text_mask=None,
         cond_scale = 3,
     ):
         logits = self.forward(idxs, clip_feature, token_mask=None, text_mask=None)
@@ -125,6 +189,69 @@ class Text2Motion_Transformer(nn.Module):
             if k == self.block_size - 1:
                 return xs[:, :-1]
         return xs
+    
+class Attention(nn.Module):
+
+    def __init__(self, embed_dim=512, block_size=16, n_head=8, drop_out_rate=0.0, norm_context=False):
+        super().__init__()
+        assert embed_dim % 8 == 0
+        # key, query, value projections for all heads
+        self.key = nn.Linear(embed_dim, embed_dim)
+        self.query = nn.Linear(embed_dim, embed_dim)
+        self.value = nn.Linear(embed_dim, embed_dim)
+
+        # self.query_scale = nn.Parameter(torch.ones(embed_dim))
+        # self.key_scale = nn.Parameter(torch.ones(embed_dim))
+
+        self.norm = LayerNorm(embed_dim)
+        self.context_norm = LayerNorm(embed_dim) if norm_context else nn.Identity()
+
+
+
+        self.attn_drop = nn.Dropout(drop_out_rate)
+        self.resid_drop = nn.Dropout(drop_out_rate)
+
+        self.proj = nn.Linear(embed_dim, embed_dim)
+        # causal mask to ensure that attention is only applied to the left in the input sequence
+        # self.register_buffer("mask", torch.tril(torch.ones(block_size, block_size)).view(1, 1, block_size, block_size))
+        self.n_head = n_head
+
+    def forward(self, x, context=None, mask=None):
+        B, T, C = x.size() 
+
+        x = self.norm(x)
+        if context is not None:
+            context = self.context_norm(context)
+
+        kv_input = context if context is not None else x
+
+        # calculate query, key, values for all heads in batch and move head forward to be the batch dim
+        k = rearrange(self.key(kv_input), 'b n (h d) -> b h n d', h=self.n_head)
+        v = rearrange(self.value(kv_input), 'b n (h d) -> b h n d', h=self.n_head)
+        q = rearrange(self.query(x), 'b n (h d) -> b h n d', h=self.n_head)
+        # v = self.value(kv_input).view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
+        # q = self.query(x).view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
+        # causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
+        att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
+
+        if mask is not None:
+            # att = att.masked_fill(self.mask[:,:,:T,:T] == 0, float('-inf'))
+            if context is not None:
+                mask = rearrange(mask, 'b j -> b 1 j 1')
+            else:
+                mask = rearrange(mask, 'b j -> b 1 1 j')
+            att = att.masked_fill(~mask, -torch.finfo(att.dtype).max)
+        # att = att.masked_fill(self.mask[:,:,:T,:T] == 0, float('-inf'))
+        att = F.softmax(att, dim=-1)
+        att = self.attn_drop(att)
+
+        # breakpoint()
+        y = att @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
+        y = y.transpose(1, 2).contiguous().view(B, T, C) # re-assemble all head outputs side by side
+
+        # output projection
+        y = self.resid_drop(self.proj(y))
+        return y
 
 class CrossConditionalSelfAttention(nn.Module):
 
@@ -191,12 +318,12 @@ class CrossConditionalCrossAttention(nn.Module):
 
 
         # calculate query, key, values for all heads in batch and move head forward to be the batch dim
-        # k = self.key(context).view(B, 1, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
+        k = self.key(context).view(B, 1, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
         v = self.value(context).view(B, 1, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
-        # q = self.query(x).view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
+        q = self.query(x).view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
         
         # causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
-        # att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
+        att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
         # att = att.masked_fill(self.mask[:,:,:T,:T] == 0, float('-inf'))
 
         att = torch.ones((B, self.n_head, T, 1), dtype=torch.float, device=x.device)
@@ -207,8 +334,8 @@ class CrossConditionalCrossAttention(nn.Module):
             att = att.masked_fill(~mask, 0)
             
         # breakpoint()
-        # att = F.softmax(att, dim=-1)
-        # att = self.attn_drop(att)
+        att = F.softmax(att, dim=-1)
+        att = self.attn_drop(att)
         # breakpoint()
         # y = einsum('b h i i, b h i d -> b h i j', att, v)
         y = att @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
@@ -220,7 +347,7 @@ class CrossConditionalCrossAttention(nn.Module):
 
 class Block(nn.Module):
 
-    def __init__(self, embed_dim=512, block_size=16, n_head=8, drop_out_rate=0.1, fc_rate=4, has_cross_attn=False):
+    def __init__(self, embed_dim=512, block_size=16, n_head=8, drop_out_rate=0.1, fc_rate=4, has_cross_attn=True):
         super().__init__()
 
         self.has_cross_attn = has_cross_attn
@@ -313,11 +440,13 @@ class CrossCondTransformer(nn.Module):
 
         token_embeddings = self.tok_emb(idx)
         context_embeddings = self.cond_emb(clip_feature).unsqueeze(1)
+        # token_embeddings = torch.cat([self.cond_emb(clip_feature).unsqueeze(1), token_embeddings], dim=1)
+        
         x = self.pos_embed(token_embeddings)
 
         # NOTE Add text condition to queries 
-        if not self.has_cross_attn:
-            x = x + context_embeddings
+        # if not self.has_cross_attn:
+        #     x = x + context_embeddings
 
         for block in self.blocks:
             x = block(x, context=context_embeddings, self_attn_mask=token_mask, cross_attn_mask=text_mask)

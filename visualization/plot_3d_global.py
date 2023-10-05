@@ -116,6 +116,7 @@ def draw_to_batch(smpl_joints_batch, title_batch=None, outname=None) :
     
     batch_size = len(smpl_joints_batch)
     out = []
+    # breakpoint()
     for i in range(batch_size) : 
         out.append(plot_3d_motion([smpl_joints_batch[i], None, title_batch[i] if title_batch is not None else None]))
         if outname is not None:
