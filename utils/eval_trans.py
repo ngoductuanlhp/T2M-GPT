@@ -411,7 +411,7 @@ def evaluation_transformer_debug(out_dir, val_loader, net, trans, logger, writer
 
 
 @torch.no_grad()        
-def evaluation_transformer(out_dir, val_loader, net, trans, logger, writer, nb_iter, best_fid, best_iter, best_div, best_top1, best_top2, best_top3, best_matching, clip_model, eval_wrapper, draw = True, save = True, savegif=False, optimizer=None, scheduler=None) : 
+def evaluation_transformer(args, out_dir, val_loader, net, trans, logger, writer, nb_iter, best_fid, best_iter, best_div, best_top1, best_top2, best_top3, best_matching, clip_model, eval_wrapper, draw = True, save = True, savegif=False, optimizer=None, scheduler=None) : 
 
     trans.eval()
     nb_sample = 0
@@ -482,7 +482,10 @@ def evaluation_transformer(out_dir, val_loader, net, trans, logger, writer, nb_i
                 ids = torch.where(mask, net.vqvae.num_code + 2, ids)
 
                 # logits = trans(ids, feat_clip_text, token_mask=None, text_mask=None)
-                logits = trans.forward_with_cond_scale(ids, feat_clip_text, token_mask=None, text_mask=None)
+                if args.cond_drop_prob == 0:
+                    logits = trans(ids, feat_clip_text, token_mask=None, text_mask=None)
+                else:
+                    logits = trans.forward_with_cond_scale(ids, feat_clip_text, token_mask=None, text_mask=None)
 
 
                 temperature = starting_temperature * (steps_til_x0 / timesteps)

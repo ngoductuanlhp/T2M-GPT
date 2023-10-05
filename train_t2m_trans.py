@@ -56,7 +56,7 @@ logger.info(json.dumps(vars(args), indent=4, sort_keys=True))
 
 from utils.word_vectorizer import WordVectorizer
 w_vectorizer = WordVectorizer('./glove', 'our_vab')
-val_loader = dataset_TM_eval.DATALoader(args.dataname, False, 32, w_vectorizer, split='train_small')
+val_loader = dataset_TM_eval.DATALoader(args.dataname, False, 32, w_vectorizer, split='val')
 
 dataset_opt_path = 'checkpoints/kit/Comp_v6_KLD005/opt.txt' if args.dataname == 'kit' else 'checkpoints/t2m/Comp_v6_KLD005/opt.txt'
 
@@ -370,6 +370,7 @@ while nb_iter <= args.total_iter:
     if nb_iter % args.eval_iter ==  0:
         best_fid, best_iter, best_div, best_top1, best_top2, best_top3, best_matching, writer, logger = \
         eval_trans.evaluation_transformer(
+            args,
             args.out_dir, 
             val_loader, 
             net, 

@@ -101,7 +101,7 @@ nb_iter=0
 
 best_fid, best_iter, best_div, best_top1, best_top2, best_top3, best_matching, writer, logger = \
     eval_trans.evaluation_transformer(
-        args.out_dir, val_loader, net, trans_encoder, logger, writer, nb_iter, best_fid, best_iter, best_div, best_top1, best_top2, best_top3, best_matching, clip_model=clip_model, eval_wrapper=eval_wrapper
+        args, args.out_dir, val_loader, net, trans_encoder, logger, writer, nb_iter, best_fid, best_iter, best_div, best_top1, best_top2, best_top3, best_matching, clip_model=clip_model, eval_wrapper=eval_wrapper
         )
 
      

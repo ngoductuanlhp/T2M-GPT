@@ -1,6 +1,6 @@
 CUDA_VISIBLE_DEVICES=$1 python3 train_t2m_trans.py  \
---exp-name GPT_MaskGit_classifierfree_new_vae_token \
---batch-size 128 \
+--exp-name GPT_MaskGit_classifierfree_new_vae_token_nodroptextcond \
+--batch-size 512 \
 --num-layers 18 \
 --embed-dim-gpt 1024 \
 --nb-code 512 \
@@ -8,13 +8,13 @@ CUDA_VISIBLE_DEVICES=$1 python3 train_t2m_trans.py  \
 --block-size 51 \
 --ff-rate 4 \
 --drop-out-rate 0.1 \
---cond-drop-prob 0.25 \
+--cond-drop-prob 0.0 \
 --resume-pth pretrained/VQVAE/net_last.pth \
 --vq-name VQVAE \
 --out-dir output \
---total-iter 300000 \
---lr-scheduler 150000 \
---lr 0.0001 \
+--total-iter 100000 \
+--lr-scheduler 50 \
+--lr 0.0003 \
 --dataname t2m \
 --split train \
 --down-t 2 \
@@ -23,6 +23,5 @@ CUDA_VISIBLE_DEVICES=$1 python3 train_t2m_trans.py  \
 --eval-iter 5000 \
 --pkeep 0.5 \
 --dilation-growth-rate 3 \
---vq-act relu 
-# \
-# --resume-trans output/GPT_MaskGit_classifierfree_debug/net_5000.pth
+--vq-act relu \
+--resume-trans output/GPT_MaskGit_classifierfree_new_vae_token_nodroptextcond/net_last.pth
