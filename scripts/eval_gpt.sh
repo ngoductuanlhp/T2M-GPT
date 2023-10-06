@@ -1,5 +1,5 @@
 CUDA_VISIBLE_DEVICES=$1 python3 GPT_eval.py  \
---exp-name VAL_GPT_MaskGit_classifierfree_debug \
+--exp-name VAL_GPT_MaskGit_classifierfree_new_vae_token \
 --batch-size 32 \
 --num-layers 18 \
 --embed-dim-gpt 1024 \
@@ -8,6 +8,7 @@ CUDA_VISIBLE_DEVICES=$1 python3 GPT_eval.py  \
 --block-size 51 \
 --ff-rate 4 \
 --drop-out-rate 0.1 \
+--cond-drop-prob 0.25 \
 --resume-pth pretrained/VQVAE/net_last.pth \
 --vq-name VQVAE \
 --out-dir output \
@@ -15,7 +16,7 @@ CUDA_VISIBLE_DEVICES=$1 python3 GPT_eval.py  \
 --lr-scheduler 150000 \
 --lr 0.0001 \
 --dataname t2m \
---split train_small \
+--split val \
 --down-t 2 \
 --depth 3 \
 --quantizer ema_reset \
@@ -23,4 +24,4 @@ CUDA_VISIBLE_DEVICES=$1 python3 GPT_eval.py  \
 --pkeep 0.5 \
 --dilation-growth-rate 3 \
 --vq-act relu \
---resume-trans output/GPT_MaskGit_classifierfree_trainsmall_new_vae_token/net_1000.pth
+--resume-trans output/GPT_MaskGit_classifierfree_new_vae_token/net_last.pth
