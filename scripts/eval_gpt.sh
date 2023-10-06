@@ -15,7 +15,7 @@ CUDA_VISIBLE_DEVICES=$1 python3 GPT_eval.py  \
 --lr-scheduler 150000 \
 --lr 0.0001 \
 --dataname t2m \
---split val_mini \
+--split val \
 --down-t 2 \
 --depth 3 \
 --quantizer ema_reset \
