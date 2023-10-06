@@ -91,8 +91,8 @@ class Text2Motion_Transformer(nn.Module):
         self.blocks = nn.ModuleList([])
         for l in range(num_layers):
             self.blocks.append(nn.ModuleList([
-                Attention(embed_dim=embed_dim, block_size=block_size, n_head=n_head, drop_out_rate=0.0, norm_context=False),
-                Attention(embed_dim=embed_dim, block_size=block_size, n_head=n_head, drop_out_rate=0.0, norm_context=True),
+                Attention(embed_dim=embed_dim, block_size=block_size, n_head=n_head, drop_out_rate=drop_out_rate, norm_context=False),
+                Attention(embed_dim=embed_dim, block_size=block_size, n_head=n_head, drop_out_rate=drop_out_rate, norm_context=True) if self.has_cross_attn else None,
                 nn.Sequential(
                     nn.LayerNorm(embed_dim),
                     nn.Linear(embed_dim, fc_rate * embed_dim),
@@ -102,6 +102,9 @@ class Text2Motion_Transformer(nn.Module):
                 )
             ]))
 
+        if not self.has_cross_attn:
+            self.context_norm = nn.LayerNorm(embed_dim)
+
         self.ln_f = nn.LayerNorm(embed_dim)
         self.head = nn.Linear(embed_dim, num_vq+1, bias=False)
         self.block_size = block_size
@@ -110,7 +113,8 @@ class Text2Motion_Transformer(nn.Module):
         # self.block_size = block_size
         # self.num_vq = num_vq
 
-        # print(len(self.blocks))
+        print('Num transformer block:', len(self.blocks))
+        print('Using cross attention:', self.has_cross_attn)
 
     def get_block_size(self):
         return self.block_size
@@ -124,13 +128,14 @@ class Text2Motion_Transformer(nn.Module):
         # x = token_embeddings
 
         # NOTE Add text condition to queries 
-        # if not self.has_cross_attn:
-        #     x = x + context_embeddings
+        if not self.has_cross_attn:
+            x = x + self.context_norm(context_embeddings)
 
         for (self_attn, cross_attn, ff) in self.blocks:
             x = self_attn(x, mask=token_mask) + x
 
-            x = cross_attn(x, context=context_embeddings, mask=text_mask) + x
+            if self.has_cross_attn:
+                x = cross_attn(x, context=context_embeddings, mask=text_mask) + x
 
             x = ff(x) + x
 
