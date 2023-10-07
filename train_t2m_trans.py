@@ -126,9 +126,12 @@ if __name__ == '__main__':
 
     ##### ---- Optimization goals ---- #####
 
-    weight_class = torch.ones((args.nb_code+1), dtype=torch.float).cuda()
-    weight_class[-1] = 0.1
-    loss_ce = torch.nn.CrossEntropyLoss(ignore_index=-100, reduction='mean', weight=weight_class)
+    # weight_class = torch.ones((args.nb_code+1), dtype=torch.float).cuda()
+    # weight_class[-1] = 0.1
+    # loss_ce = torch.nn.CrossEntropyLoss(ignore_index=-100, reduction='mean', weight=weight_class)
+    loss_ce = torch.nn.CrossEntropyLoss(ignore_index=-100, reduction='mean')
+
+
 
     nb_iter, avg_loss_cls, avg_acc = 0, 0., 0.
     right_num = 0
@@ -243,7 +246,7 @@ if __name__ == '__main__':
 
         mask = get_mask_subset_with_prob(mask_token, mask_token_prob)
 
-        a_indices = torch.where(mask, net.vqvae.num_code + 2, input_index)
+        a_indices = torch.where(mask, net.vqvae.num_code + 1, input_index)
         
 
         # breakpoint()

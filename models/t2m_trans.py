@@ -80,7 +80,8 @@ class Text2Motion_Transformer(nn.Module):
         super().__init__()
 
         self.has_cross_attn = has_cross_attn
-        self.tok_emb = nn.Embedding(num_vq+3, embed_dim)
+        # self.tok_emb = nn.Embedding(num_vq+3, embed_dim)
+        self.tok_emb = nn.Embedding(num_vq + 2, embed_dim)
         self.cond_emb = nn.Linear(clip_dim, embed_dim)
         self.pos_embed = pos_encoding.PositionEmbedding(block_size, embed_dim, 0.0, False)
         # self.pos_embedding = nn.Embedding(block_size, embed_dim)

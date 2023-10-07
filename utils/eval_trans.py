@@ -479,7 +479,7 @@ def evaluation_transformer(args, out_dir, val_loader, net, trans, logger, writer
                     # breakpoint()
                     mask = torch.zeros(shape).cuda().scatter(1, indices, 1).bool()
 
-                ids = torch.where(mask, net.vqvae.num_code + 2, ids)
+                ids = torch.where(mask, net.vqvae.num_code + 1, ids)
 
                 # logits = trans(ids, feat_clip_text, token_mask=None, text_mask=None)
                 if args.cond_drop_prob == 0:
