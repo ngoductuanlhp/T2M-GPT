@@ -80,9 +80,11 @@ class Text2Motion_Transformer(nn.Module):
         super().__init__()
 
         self.has_cross_attn = has_cross_attn
-        self.tok_emb = nn.Embedding(num_vq+3, embed_dim)
+        self.tok_emb = nn.Embedding(num_vq+2, embed_dim)
         self.cond_emb = nn.Linear(clip_dim, embed_dim)
-        self.pos_embed = pos_encoding.PositionEmbedding(block_size, embed_dim, 0.0, False)
+        self.pos_embed = pos_encoding.PositionEmbedding(block_size+1, embed_dim, 0.0, False)
+
+        self.length_token = nn.Parameter(torch.randn(1, 1, embed_dim))
         # self.pos_embedding = nn.Embedding(block_size, embed_dim)
         # self.drop = nn.Dropout(drop_out_rate)
         # transformer block
@@ -106,7 +108,8 @@ class Text2Motion_Transformer(nn.Module):
             self.context_norm = nn.LayerNorm(embed_dim)
 
         self.ln_f = nn.LayerNorm(embed_dim)
-        self.head = nn.Linear(embed_dim, num_vq+1, bias=False)
+        self.head = nn.Linear(embed_dim, num_vq, bias=False)
+        self.length_head = nn.Linear(embed_dim, block_size-4, bias=False) # 47 value: 0->4 length, 46-> 50 length
         self.block_size = block_size
 
         # self.transformer = CrossCondTransformer(num_vq, embed_dim, clip_dim, block_size, num_layers*2, n_head, drop_out_rate, fc_rate, has_cross_attn=has_cross_attn)
@@ -124,9 +127,18 @@ class Text2Motion_Transformer(nn.Module):
         context_embeddings = self.cond_emb(clip_feature).unsqueeze(1)
         # token_embeddings = torch.cat([self.cond_emb(clip_feature).unsqueeze(1), token_embeddings], dim=1)
         
+        length_embeddings = self.length_token.repeat(token_embeddings.shape[0], 1, 1)
+        token_embeddings = torch.cat([length_embeddings, token_embeddings], dim=1)
         x = self.pos_embed(token_embeddings)
         # x = token_embeddings
+        length_mask = torch.ones((token_embeddings.shape[0], 1), dtype=torch.bool, device=token_embeddings.device)
+       
+        if token_mask is not None:
+            token_mask = torch.cat([length_mask, token_mask], dim=1)
+        if text_mask is not None:
+            text_mask = torch.cat([length_mask, text_mask], dim=1)
 
+        # breakpoint()
         # NOTE Add text condition to queries 
         if not self.has_cross_attn:
             x = x + self.context_norm(context_embeddings)
@@ -142,8 +154,10 @@ class Text2Motion_Transformer(nn.Module):
             # x = block(x, context=context_embeddings, self_attn_mask=token_mask, cross_attn_mask=text_mask)
 
         x = self.ln_f(x)
-        logits = self.head(x)
-        return logits
+
+        length_logit = self.length_head(x[:, 0])
+        logits = self.head(x[:, 1:])
+        return length_logit, logits
     
         # breakpoint()
         # logits = self.transformer(idxs, clip_feature, token_mask=token_mask, text_mask=text_mask)
@@ -157,14 +171,14 @@ class Text2Motion_Transformer(nn.Module):
         text_mask=None,
         cond_scale = 3,
     ):
-        logits = self.forward(idxs, clip_feature, token_mask=None, text_mask=None)
+        length_logit, logits = self.forward(idxs, clip_feature, token_mask=None, text_mask=None)
 
         if cond_scale == 1:
             return logits
 
         text_mask = torch.zeros_like(idxs).bool()
-        null_logits = self.forward(idxs, clip_feature, token_mask=None, text_mask=text_mask)
-        return null_logits + (logits - null_logits) * cond_scale
+        _, null_logits = self.forward(idxs, clip_feature, token_mask=None, text_mask=text_mask)
+        return length_logit, null_logits + (logits - null_logits) * cond_scale
 
     def sample(self, clip_feature, if_categorial=False):
         for k in range(self.block_size):

@@ -126,9 +126,12 @@ if __name__ == '__main__':
 
     ##### ---- Optimization goals ---- #####
 
-    weight_class = torch.ones((args.nb_code+1), dtype=torch.float).cuda()
-    weight_class[-1] = 0.1
-    loss_ce = torch.nn.CrossEntropyLoss(ignore_index=-100, reduction='mean', weight=weight_class)
+    # weight_class = torch.ones((args.nb_code+1), dtype=torch.float).cuda()
+    # weight_class[-1] = 0.1
+    # loss_ce = torch.nn.CrossEntropyLoss(ignore_index=-100, reduction='mean', weight=weight_class)
+    loss_ce = torch.nn.CrossEntropyLoss(ignore_index=-100, reduction='mean')
+    loss_ce_length = torch.nn.CrossEntropyLoss(ignore_index=-100, reduction='mean')
+
 
     nb_iter, avg_loss_cls, avg_acc = 0, 0., 0.
     right_num = 0
@@ -243,12 +246,12 @@ if __name__ == '__main__':
 
         mask = get_mask_subset_with_prob(mask_token, mask_token_prob)
 
-        a_indices = torch.where(mask, net.vqvae.num_code + 2, input_index)
+        a_indices = torch.where(mask, net.vqvae.num_code, input_index)
         
 
         # breakpoint()
         # NOTE Forward model
-        cls_pred = trans_encoder(a_indices, feat_clip_text, mask_token, text_mask)
+        length_pred, cls_pred = trans_encoder(a_indices, feat_clip_text, mask_token, text_mask)
 
         # breakpoint()
         cls_pred = cls_pred.contiguous()
@@ -266,6 +269,9 @@ if __name__ == '__main__':
         # cls_pred_ = cls_pred.flatten(0,1)[mask_token.flatten(0,1)]
         # target_ = target[:,:-1].flatten(0,1)[mask_token.flatten(0,1)]
         loss_cls = loss_ce(cls_pred_, target_) # B, len
+
+        m_tokens_len = torch.clamp(m_tokens_len-4, 0, 46)
+        loss_length = loss_ce_length(length_pred, m_tokens_len)
 
 
         probs = torch.softmax(cls_pred_, dim=-1)
@@ -374,6 +380,7 @@ if __name__ == '__main__':
             nb_sample_train = 0
 
         if nb_iter % args.eval_iter ==  0:
+        # if nb_iter % 1 ==  0:
             best_fid, best_iter, best_div, best_top1, best_top2, best_top3, best_matching, writer, logger = \
             eval_trans.evaluation_transformer(
                 args,

@@ -479,13 +479,13 @@ def evaluation_transformer(args, out_dir, val_loader, net, trans, logger, writer
                     # breakpoint()
                     mask = torch.zeros(shape).cuda().scatter(1, indices, 1).bool()
 
-                ids = torch.where(mask, net.vqvae.num_code + 2, ids)
+                ids = torch.where(mask, net.vqvae.num_code, ids)
 
                 # logits = trans(ids, feat_clip_text, token_mask=None, text_mask=None)
                 if args.cond_drop_prob == 0:
-                    logits = trans(ids, feat_clip_text, token_mask=None, text_mask=None)
+                    length_logit, logits = trans(ids, feat_clip_text, token_mask=None, text_mask=None)
                 else:
-                    logits = trans.forward_with_cond_scale(ids, feat_clip_text, token_mask=None, text_mask=None)
+                    length_logit, logits = trans.forward_with_cond_scale(ids, feat_clip_text, token_mask=None, text_mask=None)
 
 
                 temperature = starting_temperature * (steps_til_x0 / timesteps)
@@ -503,9 +503,12 @@ def evaluation_transformer(args, out_dir, val_loader, net, trans, logger, writer
             for k in tqdm(range(bs)):
                 ids_ = ids[k]
                 try:
-                    first_end = torch.nonzero(ids_ == net.vqvae.num_code).view(-1)[0]
+                    # first_end = torch.nonzero(ids_ == net.vqvae.num_code).view(-1)[0]
+                    first_end = torch.argmax(length_logit[k], dim=-1)
+                    first_end = torch.clamp(first_end, 4, 50)
                 except:
                     first_end = -1
+                    
                 ids_ = ids_[:first_end]
 
                 pred_pose = net.forward_decoder(ids_[None,:])
