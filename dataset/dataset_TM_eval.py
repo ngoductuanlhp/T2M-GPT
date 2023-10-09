@@ -75,6 +75,10 @@ class Text2MotionDataset(data.Dataset):
                 motion = np.load(pjoin(self.motion_dir, name + '.npy'))
                 if (len(motion)) < min_motion_len or (len(motion) >= 200):
                     continue
+
+                flan_t5_embedding_list = torch.load(pjoin(self.data_root, 'flan-t5-base_text_embeddings', '%s.pth'%name), map_location='cpu')
+                flan_t5_embedding_list = [f.detach() for f in flan_t5_embedding_list]
+                
                 text_data = []
                 flag = False
                 with cs.open(pjoin(self.text_dir, name + '.txt')) as f:
@@ -103,7 +107,8 @@ class Text2MotionDataset(data.Dataset):
                                     new_name = random.choice('ABCDEFGHIJKLMNOPQRSTUVW') + '_' + name
                                 data_dict[new_name] = {'motion': n_motion,
                                                        'length': len(n_motion),
-                                                       'text':[text_dict]}
+                                                       'text':[text_dict],
+                                                        'flan_t5_embedding': flan_t5_embedding_list}
                                 new_name_list.append(new_name)
                                 length_list.append(len(n_motion))
                             except:
@@ -114,7 +119,8 @@ class Text2MotionDataset(data.Dataset):
                 if flag:
                     data_dict[name] = {'motion': motion,
                                        'length': len(motion),
-                                       'text': text_data}
+                                       'text': text_data,
+                                       'flan_t5_embedding': flan_t5_embedding_list}
                     new_name_list.append(name)
                     length_list.append(len(motion))
             except Exception as e:
@@ -149,10 +155,13 @@ class Text2MotionDataset(data.Dataset):
         name = self.name_list[idx]
         data = self.data_dict[name]
         # data = self.data_dict[self.name_list[idx]]
-        motion, m_length, text_list = data['motion'], data['length'], data['text']
+        motion, m_length, text_list, t5_embedding_list = data['motion'], data['length'], data['text'], data['flan_t5_embedding']
         # Randomly select a caption
-        text_data = random.choice(text_list)
+        choice = random.choice(range(len(text_list)))
+        text_data = text_list[choice]
         caption, tokens = text_data['caption'], text_data['tokens']
+        t5_embedding = t5_embedding_list[choice]
+
 
         if len(tokens) < self.max_text_len:
             # pad with "unk"
@@ -193,7 +202,7 @@ class Text2MotionDataset(data.Dataset):
                                      np.zeros((self.max_motion_length - m_length, motion.shape[1]))
                                      ], axis=0)
 
-        return word_embeddings, pos_one_hots, caption, sent_len, motion, m_length, '_'.join(tokens), name
+        return word_embeddings, pos_one_hots, caption, sent_len, motion, m_length, '_'.join(tokens), name, t5_embedding
 
 
 

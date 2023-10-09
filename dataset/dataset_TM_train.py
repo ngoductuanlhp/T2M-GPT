@@ -10,8 +10,34 @@ from torch.utils.data._utils.collate import default_collate
 
 
 def collate_fn(batch):
-    batch.sort(key=lambda x: x[3], reverse=True)
-    return default_collate(batch)
+    # batch.sort(key=lambda x: x[3], reverse=True)
+
+    t5_embedding_list = []
+    m_tokens_list = []
+    m_tokens_len_list = []
+    mask_token_list = []
+
+    max_len_embed = -1
+    for b in batch:
+        t5_embedding, m_tokens, m_tokens_len, mask_token = b
+        t5_embedding_list.append(t5_embedding)
+        m_tokens_list.append(torch.from_numpy(m_tokens))
+        m_tokens_len_list.append(m_tokens_len)
+        mask_token_list.append(torch.from_numpy(mask_token))
+
+        max_len_embed = max(max_len_embed, t5_embedding.shape[1])
+
+    t5_embedding_tensor = torch.zeros((len(batch), max_len_embed, 768), dtype=torch.float)
+    t5_embedding_mask = torch.zeros((len(batch), max_len_embed), dtype=torch.bool)
+
+    for b, embed in enumerate(t5_embedding_list):
+        t5_embedding_tensor[b, :embed.shape[1]] = embed
+        t5_embedding_mask[b, :embed.shape[1]] = 1
+
+    m_tokens_list = torch.stack(m_tokens_list, dim=0)
+    mask_token_list = torch.stack(mask_token_list, dim=0)
+    m_tokens_len_list = torch.tensor(m_tokens_len_list)
+    return t5_embedding_tensor, t5_embedding_mask, m_tokens_list, m_tokens_len_list, mask_token_list
 
 
 '''For use of training text-2-motion generative model'''
@@ -66,7 +92,9 @@ class Text2MotionDataset(data.Dataset):
         for name in tqdm(id_list):
             try:
                 m_token_list = np.load(pjoin(self.data_root, tokenizer_name, '%s.npy'%name))
-
+                flan_t5_embedding_list = torch.load(pjoin(self.data_root, 'flan-t5-base_text_embeddings', '%s.pth'%name), map_location='cpu')
+                flan_t5_embedding_list = [f.detach() for f in flan_t5_embedding_list]
+                # breakpoint()
                 # Read text
                 with cs.open(pjoin(self.text_dir, name + '.txt')) as f:
                     text_data = []
@@ -97,14 +125,16 @@ class Text2MotionDataset(data.Dataset):
                                 new_name = '%s_%f_%f'%(name, f_tag, to_tag)
 
                                 data_dict[new_name] = {'m_token_list': m_token_list_new,
-                                                       'text':[text_dict]}
+                                                       'text':[text_dict],
+                                                       'flan_t5_embedding': flan_t5_embedding_list}
                                 new_name_list.append(new_name)
                         except:
                             pass
 
                 if flag:
                     data_dict[name] = {'m_token_list': m_token_list,
-                                       'text':text_data}
+                                       'text':text_data,
+                                       'flan_t5_embedding': flan_t5_embedding_list}
                     new_name_list.append(name)
             except:
                 pass
@@ -122,13 +152,16 @@ class Text2MotionDataset(data.Dataset):
 
         # print('0')
         data = self.data_dict[self.name_list[item]]
-        m_token_list, text_list = data['m_token_list'], data['text']
+
+        # print(data.keys())
+        m_token_list, t5_embedding_list = data['m_token_list'], data['flan_t5_embedding'] # data['text']
         m_tokens = random.choice(m_token_list)
 
         # print(len(m_token_list), m_token_list)
 
-        text_data = random.choice(text_list)
-        caption = text_data['caption']
+        t5_embedding = random.choice(t5_embedding_list)
+        # t5_embedding = t5_embedding['caption']
+        # t5_embedding = text_data['flan_t5_embedding']
 
         # print('1')
         
@@ -160,8 +193,8 @@ class Text2MotionDataset(data.Dataset):
 
         m_tokens = m_tokens.reshape(-1)
 
-        # print('dataloader', m_tokens.shape)
-        return caption, m_tokens, m_tokens_len, mask_token
+        # print('dataloader', t5_embedding.shape)
+        return t5_embedding, m_tokens, m_tokens_len, mask_token
 
 
 
@@ -174,7 +207,7 @@ def DATALoader(dataset_name,
                                               batch_size,
                                               shuffle=True,
                                               num_workers=num_workers,
-                                              #collate_fn=collate_fn,
+                                              collate_fn=collate_fn,
                                               drop_last = True)
     
 

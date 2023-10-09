@@ -197,9 +197,12 @@ if __name__ == '__main__':
     while nb_iter <= args.total_iter:
         # print(nb_iter)
         batch = next(train_loader_iter)
-        clip_text, m_tokens, m_tokens_len, mask_token = batch
+        t5_embedding, t5_embedding_mask, m_tokens, m_tokens_len, mask_token = batch
         m_tokens, m_tokens_len, mask_token = m_tokens.cuda(), m_tokens_len.cuda(), mask_token.cuda()
-        
+
+        t5_embedding = t5_embedding.cuda()
+        t5_embedding_mask = t5_embedding_mask.cuda()
+        # breakpoint()
         bs, seq_len = m_tokens.shape[0], m_tokens.shape[1]
         # seq_len = seq_len -1 # FIXME -1 to remove the [END] token
         
@@ -207,19 +210,18 @@ if __name__ == '__main__':
         device = target.device
 
         
-        text = clip.tokenize(clip_text, truncate=True).cuda()
-        
-        feat_clip_text = clip_model.encode_text(text).float()
+        # text = clip.tokenize(clip_text, truncate=True).cuda()
+        # feat_clip_text = clip_model.encode_text(text).float()
 
         # breakpoint()
         input_index = target
         # mask_token = mask_token[:, :-1]
 
 
-        text_mask = torch.ones_like(mask_token)
+        # text_mask = torch.ones_like(mask_token)
         if args.cond_drop_prob > 0:
-            keep_mask = prob_mask_like((bs,), 1 - args.cond_drop_prob, device = text_mask.device)
-            text_mask = rearrange(keep_mask, 'b -> b 1') & text_mask
+            keep_mask = prob_mask_like((bs,), 1 - args.cond_drop_prob, device = t5_embedding_mask.device)
+            text_mask = rearrange(keep_mask, 'b -> b 1') & t5_embedding_mask
         
 
         # NOTE masking
@@ -251,7 +253,7 @@ if __name__ == '__main__':
 
         # breakpoint()
         # NOTE Forward model
-        length_pred, cls_pred = trans_encoder(a_indices, feat_clip_text, mask_token, text_mask)
+        length_pred, cls_pred = trans_encoder(a_indices, t5_embedding, mask_token, text_mask)
 
         # breakpoint()
         cls_pred = cls_pred.contiguous()

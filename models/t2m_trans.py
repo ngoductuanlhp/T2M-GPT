@@ -124,7 +124,9 @@ class Text2Motion_Transformer(nn.Module):
 
     def forward(self, idxs, clip_feature, token_mask=None, text_mask=None):
         token_embeddings = self.tok_emb(idxs)
-        context_embeddings = self.cond_emb(clip_feature).unsqueeze(1)
+        # context_embeddings = self.cond_emb(clip_feature).unsqueeze(1)
+
+        context_embeddings = self.cond_emb(clip_feature)
         # token_embeddings = torch.cat([self.cond_emb(clip_feature).unsqueeze(1), token_embeddings], dim=1)
         
         length_embeddings = self.length_token.repeat(token_embeddings.shape[0], 1, 1)
@@ -135,8 +137,8 @@ class Text2Motion_Transformer(nn.Module):
        
         if token_mask is not None:
             token_mask = torch.cat([length_mask, token_mask], dim=1)
-        if text_mask is not None:
-            text_mask = torch.cat([length_mask, text_mask], dim=1)
+        # if text_mask is not None:
+        #     text_mask = torch.cat([length_mask, text_mask], dim=1)
 
         # breakpoint()
         # NOTE Add text condition to queries 
@@ -255,11 +257,13 @@ class Attention(nn.Module):
 
         if mask is not None:
             # att = att.masked_fill(self.mask[:,:,:T,:T] == 0, float('-inf'))
-            if context is not None:
-                mask = rearrange(mask, 'b j -> b 1 j 1')
-            else:
-                mask = rearrange(mask, 'b j -> b 1 1 j')
+            # if context is not None:
+            #     mask = rearrange(mask, 'b j -> b 1 j 1')
+            # else:
+            #     mask = rearrange(mask, 'b j -> b 1 1 j')
             # mask = rearrange(mask, 'b j -> b 1 j 1')
+            mask = rearrange(mask, 'b j -> b 1 1 j')
+            # breakpoint()
             att = att.masked_fill(~mask, -torch.finfo(att.dtype).max)
         # att = att.masked_fill(self.mask[:,:,:T,:T] == 0, float('-inf'))
         att = F.softmax(att, dim=-1)

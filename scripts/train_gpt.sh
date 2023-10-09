@@ -1,7 +1,8 @@
 CUDA_VISIBLE_DEVICES=$1 python3 train_t2m_trans.py  \
---exp-name GPT_MaskGit_classifierfree_new_vae_token_predlength_15layers \
---batch-size 512 \
---num-layers 15 \
+--exp-name GPT_MaskGit_classifierfree_predlength_15layers_t5_embedding \
+--batch-size 16 \
+--num-layers 4 \
+--clip-dim 768 \
 --embed-dim-gpt 1024 \
 --nb-code 512 \
 --n-head-gpt 16 \
@@ -16,7 +17,7 @@ CUDA_VISIBLE_DEVICES=$1 python3 train_t2m_trans.py  \
 --lr-scheduler 37500 \
 --lr 0.0003 \
 --dataname t2m \
---split train \
+--split train_mini \
 --down-t 2 \
 --depth 3 \
 --quantizer ema_reset \
