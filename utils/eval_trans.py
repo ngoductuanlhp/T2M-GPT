@@ -432,7 +432,10 @@ def evaluation_transformer(args, out_dir, val_loader, net, trans, logger, writer
     for i in range(1):
         for batch in val_loader:
             # print('test')
-            word_embeddings, pos_one_hots, clip_text, sent_len, pose, m_length, token, name = batch
+            (word_embeddings, pos_one_hots, clip_text, sent_len, pose, m_length, token, name), t5_embedding, t5_embedding_mask = batch
+
+            t5_embedding = t5_embedding.cuda()
+            t5_embedding_mask = t5_embedding_mask.cuda()
 
             num_joints = 21 if pose.shape[-1] == 251 else 22
 
@@ -441,7 +444,7 @@ def evaluation_transformer(args, out_dir, val_loader, net, trans, logger, writer
 
             text = clip.tokenize(clip_text, truncate=True).cuda()
 
-            feat_clip_text = clip_model.encode_text(text).float()
+            # feat_clip_text = clip_model.encode_text(text).float()
             pred_pose_eval = torch.zeros((bs, pose_seq, pose.shape[-1])).cuda()
             pred_len = torch.ones(bs).long()
 
@@ -457,6 +460,9 @@ def evaluation_transformer(args, out_dir, val_loader, net, trans, logger, writer
             # rand_ = torch.rand((bs, seq_len), dtype = torch.float).cuda()
             # ids[rand_ < 0.3] = net.vqvae.num_code + 2
             # scores = torch.zeros((bs, seq_len), dtype = torch.float32).cuda()
+
+
+            text_mask = t5_embedding_mask
             mask = torch.ones((bs, seq_len), dtype = torch.bool).cuda()
             # breakpoint()
             scores = None
@@ -483,9 +489,9 @@ def evaluation_transformer(args, out_dir, val_loader, net, trans, logger, writer
 
                 # logits = trans(ids, feat_clip_text, token_mask=None, text_mask=None)
                 if args.cond_drop_prob == 0:
-                    length_logit, logits = trans(ids, feat_clip_text, token_mask=None, text_mask=None)
+                    length_logit, logits = trans(ids, t5_embedding, token_mask=None, text_mask=text_mask)
                 else:
-                    length_logit, logits = trans.forward_with_cond_scale(ids, feat_clip_text, token_mask=None, text_mask=None)
+                    length_logit, logits = trans.forward_with_cond_scale(ids, t5_embedding, token_mask=None, text_mask=text_mask)
 
 
                 temperature = starting_temperature * (steps_til_x0 / timesteps)
