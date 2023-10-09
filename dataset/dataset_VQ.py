@@ -16,7 +16,7 @@ class VQMotionDataset(data.Dataset):
 
         if dataset_name == 't2m':
             self.data_root = './dataset/HumanML3D'
-            self.motion_dir = pjoin(self.data_root, 'new_joint_vecs')
+            self.motion_dir = pjoin(self.data_root, 'new_joint_vecs_absolute_root')
             self.text_dir = pjoin(self.data_root, 'texts')
             self.joints_num = 22
             self.max_motion_length = 196
@@ -33,8 +33,12 @@ class VQMotionDataset(data.Dataset):
         
         joints_num = self.joints_num
 
-        mean = np.load(pjoin(self.meta_dir, 'mean.npy'))
-        std = np.load(pjoin(self.meta_dir, 'std.npy'))
+        # mean = np.load(pjoin(self.meta_dir, 'mean.npy'))
+        # std = np.load(pjoin(self.meta_dir, 'std.npy'))
+
+
+        mean = np.load(pjoin(self.meta_dir, 'Mean_absolute_root.npy'))
+        std = np.load(pjoin(self.meta_dir, 'Std_absolute_root.npy'))
 
         split_file = pjoin(self.data_root, 'train.txt')
 

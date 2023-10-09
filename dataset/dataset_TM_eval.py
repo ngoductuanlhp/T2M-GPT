@@ -28,7 +28,7 @@ class Text2MotionDataset(data.Dataset):
         self.w_vectorizer = w_vectorizer
         if dataset_name == 't2m':
             self.data_root = './dataset/HumanML3D'
-            self.motion_dir = pjoin(self.data_root, 'new_joint_vecs')
+            self.motion_dir = pjoin(self.data_root, 'new_joint_vecs_absolute_root')
             self.text_dir = pjoin(self.data_root, 'texts')
             self.joints_num = 22
             radius = 4
@@ -49,8 +49,12 @@ class Text2MotionDataset(data.Dataset):
             kinematic_chain = paramUtil.kit_kinematic_chain
             self.meta_dir = 'checkpoints/kit/VQVAEV3_CB1024_CMT_H1024_NRES3/meta'
 
-        mean = np.load(pjoin(self.meta_dir, 'mean.npy'))
-        std = np.load(pjoin(self.meta_dir, 'std.npy'))
+        # mean = np.load(pjoin(self.meta_dir, 'mean.npy'))
+        # std = np.load(pjoin(self.meta_dir, 'std.npy'))
+
+        mean = np.load(pjoin(self.meta_dir, 'Mean_absolute_root.npy'))
+        std = np.load(pjoin(self.meta_dir, 'Std_absolute_root.npy'))
+
         
         if is_test:
             split_file = pjoin(self.data_root, 'test.txt')
