@@ -483,9 +483,9 @@ def evaluation_transformer(args, out_dir, val_loader, net, trans, logger, writer
 
                 # logits = trans(ids, feat_clip_text, token_mask=None, text_mask=None)
                 if args.cond_drop_prob == 0:
-                    length_logit, logits = trans(ids, feat_clip_text, token_mask=None, text_mask=None)
+                    length_logit, logits = trans(ids, feat_clip_text, token_mask=None, text_mask=None, only_logits = not is_last_step)
                 else:
-                    length_logit, logits = trans.forward_with_cond_scale(ids, feat_clip_text, token_mask=None, text_mask=None)
+                    length_logit, logits = trans.forward_with_cond_scale(ids, feat_clip_text, token_mask=None, text_mask=None, only_logits = not is_last_step)
 
 
                 temperature = starting_temperature * (steps_til_x0 / timesteps)
