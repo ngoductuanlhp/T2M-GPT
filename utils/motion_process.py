@@ -1,6 +1,20 @@
 import torch
 from utils.quaternion import quaternion_to_cont6d, qrot, qinv
 
+def recover_humanml3d(data):
+    rot_ang = data[..., 0]
+
+    rot_vel = torch.zeros_like(rot_ang).to(data.device)
+    rot_vel[:-1] = rot_ang[1:] - rot_ang[:-1]
+
+    data_z = data[..., 3]
+    data_xy = data[..., 1:3]
+
+    xy_velo = torch.zeros(data.shape[:-1] + (2,)).to(data.device)
+    xy_velo[..., :-1, :2] = data_xy[..., 1:, :2] - data_xy[..., :-1, :2]
+
+    return torch.cat([rot_vel[..., None], xy_velo, data_z[..., None], data[..., 4:]], dim=-1)
+
 def recover_root_rot_pos3(data):
     rot_vel = data[..., 0]
     r_rot_ang = torch.zeros_like(rot_vel).to(data.device)

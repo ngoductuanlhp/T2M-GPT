@@ -49,8 +49,8 @@ class Text2MotionDataset(data.Dataset):
             kinematic_chain = paramUtil.kit_kinematic_chain
             self.meta_dir = 'checkpoints/kit/VQVAEV3_CB1024_CMT_H1024_NRES3/meta'
 
-        # mean = np.load(pjoin(self.meta_dir, 'mean.npy'))
-        # std = np.load(pjoin(self.meta_dir, 'std.npy'))
+        self.humanml3d_mean = np.load(pjoin(self.meta_dir, 'mean.npy'))
+        self.humanml3d_std = np.load(pjoin(self.meta_dir, 'std.npy'))
 
         mean = np.load(pjoin(self.data_root, 'Mean_absolute_root.npy'))
         std = np.load(pjoin(self.data_root, 'Std_absolute_root.npy'))
@@ -141,6 +141,13 @@ class Text2MotionDataset(data.Dataset):
 
     def inv_transform(self, data):
         return data * self.std + self.mean
+
+    def inv_transform_humanml3d(self, data):
+        return data * self.humanml3d_std + self.humanml3d_mean
+        
+
+    def forward_transform_humanml3d(self, data):
+        return (data - self.humanml3d_mean) / self.humanml3d_std
 
     def forward_transform(self, data):
         return (data - self.mean) / self.std

@@ -6,7 +6,7 @@ import torch
 from scipy import linalg
 
 import visualization.plot_3d_global as plot_3d
-from utils.motion_process import recover_from_ric, recover_from_rot, recover_from_ric2
+from utils.motion_process import recover_from_ric, recover_from_rot, recover_from_ric2, recover_humanml3d
 from tqdm import tqdm
 
 
@@ -65,7 +65,10 @@ def evaluation_vqvae(out_dir, val_loader, net, logger, writer, nb_iter, best_fid
                 np.save(os.path.join(out_dir, name[i]+'_gt.npy'), pose_xyz[:, :m_length[i]].cpu().numpy())
                 np.save(os.path.join(out_dir, name[i]+'_pred.npy'), pred_xyz.detach().cpu().numpy())
 
-            pred_pose_eval[i:i+1,:m_length[i],:] = pred_pose
+            pred_pose_humanml3d = recover_humanml3d(pred_pose)
+            # pred_denorm_humanml3d = recover_humanml3d(torch.from_numpy(pred_denorm).float())
+            # pred_norm_humanml3d = val_loader.dataset.inverse_transform_humanml3d(pred_pose_humanml3d.cpu().numpy())
+            pred_pose_eval[i:i+1,:m_length[i],:] = pred_pose_humanml3d
 
             if i < min(4, bs):
                 draw_org.append(pose_xyz)
