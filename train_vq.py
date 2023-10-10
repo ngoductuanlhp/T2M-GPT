@@ -59,7 +59,8 @@ eval_wrapper = EvaluatorModelWrapper(wrapper_opt)
 train_loader = dataset_VQ.DATALoader(args.dataname,
                                         args.batch_size,
                                         window_size=args.window_size,
-                                        unit_length=2**args.down_t)
+                                        unit_length=2**args.down_t,
+                                        split=args.split)
 
 train_loader_iter = dataset_VQ.cycle(train_loader)
 

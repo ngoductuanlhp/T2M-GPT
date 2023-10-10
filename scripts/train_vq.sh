@@ -1,8 +1,10 @@
 CUDA_VISIBLE_DEVICES=$1 python3 train_vq.py \
---batch-size 1024 \
---lr 6e-4 \
---total-iter 75000 \
---lr-scheduler 50000 \
+--batch-size 256 \
+--split train \
+--lr 2e-4 \
+--eval-iter 5000 \
+--total-iter 300000 \
+--lr-scheduler 200000 \
 --nb-code 512 \
 --down-t 2 \
 --depth 3 \
@@ -13,5 +15,4 @@ CUDA_VISIBLE_DEVICES=$1 python3 train_vq.py \
 --quantizer ema_reset \
 --loss-vel 0.5 \
 --recons-loss l1_smooth \
---exp-name VQVAE \
---resume-pth output/VQVAE/net_best_fid.pth
+--exp-name VQVAE_abs

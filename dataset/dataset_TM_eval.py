@@ -52,8 +52,8 @@ class Text2MotionDataset(data.Dataset):
         # mean = np.load(pjoin(self.meta_dir, 'mean.npy'))
         # std = np.load(pjoin(self.meta_dir, 'std.npy'))
 
-        mean = np.load(pjoin(self.meta_dir, 'Mean_absolute_root.npy'))
-        std = np.load(pjoin(self.meta_dir, 'Std_absolute_root.npy'))
+        mean = np.load(pjoin(self.data_root, 'Mean_absolute_root.npy'))
+        std = np.load(pjoin(self.data_root, 'Std_absolute_root.npy'))
 
         
         if is_test:
