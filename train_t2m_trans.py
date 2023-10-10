@@ -71,11 +71,11 @@ if __name__ == '__main__':
 
 
     ##### ---- Network ---- #####
-    clip_model, clip_preprocess = clip.load("ViT-B/32", device=torch.device('cuda'), jit=False)  # Must set jit=False for training
-    clip.model.convert_weights(clip_model)  # Actually this line is unnecessary since clip by default already on float16
-    clip_model.eval()
-    for p in clip_model.parameters():
-        p.requires_grad = False
+    # clip_model, clip_preprocess = clip.load("ViT-B/32", device=torch.device('cuda'), jit=False)  # Must set jit=False for training
+    # clip.model.convert_weights(clip_model)  # Actually this line is unnecessary since clip by default already on float16
+    # clip_model.eval()
+    # for p in clip_model.parameters():
+    #     p.requires_grad = False
 
     net = vqvae.HumanVQVAE(args, ## use args to define different parameters in different quantizers
                         args.nb_code,
@@ -293,82 +293,6 @@ if __name__ == '__main__':
         avg_loss_cls = avg_loss_cls + loss_cls.item()
         nb_sample_train = nb_sample_train + (mask).sum().item()
 
-
-        # FIXME debug
-                        # draw_pred = []
-                        # draw_text_pred = []
-
-                        # cls_arg = cls_pred.argmax(-1)
-                        # ids = cls_arg
-                        # for k in tqdm(range(4,8)):
-                        #     ids_ = ids[k]
-                        #     # breakpoint()
-                        #     try:
-                        #         first_end = torch.nonzero(ids_ == net.vqvae.num_code).view(-1)[0]
-                        #     except:
-                        #         first_end = -1
-                        #     # print('first_end', first_end)
-                        #     ids_ = ids_[:first_end]
-                        #     # breakpoint()
-                        #     # breakpoint()
-                        #     pred_pose = net.forward_decoder(ids_[None,:])
-
-                        #     # breakpoint()
-                        #     # cur_len = pred_pose.shape[1]
-
-                        #     # pred_len[k] = min(cur_len, 196)
-                        #     # # pred_len[k] = m_length[k]
-                        #     # if pred_len[k] < 4:
-                        #     #     continue
-
-                        #     # # pred_pose_eval[k:k+1, :pred_len[k]] = pose.cuda()[k:k+1, :pred_len[k]]
-                        #     # pred_pose_eval[k:k+1, :pred_len[k]] = pred_pose[:, :pred_len[k]]
-
-                        #     pred_denorm = train_loader.dataset.inv_transform(pred_pose.detach().cpu().numpy())
-                        #     pred_xyz = recover_from_ric(torch.from_numpy(pred_denorm).float().cuda(), 22)
-
-                        #     if k < 4:
-                        #         draw_pred.append(pred_xyz)
-                        #         draw_text_pred.append(clip_text[k])
-                        
-
-                        #     tensorborad_add_video_xyz(writer, pred_xyz, 100000, tag='./Vis/debug_pred'+str(k), nb_vis=1, title_batch=[clip_text[k]], outname=[os.path.join('./results/maskgit_debug', 'pred'+str(k)+'.gif')])
-                            
-                        # for k in tqdm(range(4,8)):
-                        #     input_index_ = input_index[k]
-                        #     # breakpoint()
-                        #     try:
-                        #         first_end = torch.nonzero(input_index_ == net.vqvae.num_code).view(-1)[0]
-                        #     except:
-                        #         first_end = -1
-                        #     # print('first_end', first_end)
-                        #     input_index_ = input_index_[:first_end]
-                        #     # breakpoint()
-
-                        #     gt_pose = net.forward_decoder(input_index_[None,:])
-
-                        #     # breakpoint()
-                        #     # cur_len = gt_pose.shape[1]
-
-                        #     # gt_len[k] = min(cur_len, 196)
-                        #     # # pred_len[k] = m_length[k]
-                        #     # if gt_len[k] < 4:
-                        #     #     continue
-
-                        #     # pred_pose_eval[k:k+1, :pred_len[k]] = pose.cuda()[k:k+1, :pred_len[k]]
-                        #     # gt_pose_eval[k:k+1, :pred_len[k]] = gt_pose[:, :pred_len[k]
-
-                        #     pred_denorm = train_loader.dataset.inv_transform(gt_pose.detach().cpu().numpy())
-                        #     pred_xyz = recover_from_ric(torch.from_numpy(pred_denorm).float().cuda(), 22)
-
-                        #     if k < 4:
-                        #         draw_pred.append(pred_xyz)
-                        #         draw_text_pred.append(clip_text[k])
-                        #     tensorborad_add_video_xyz(writer, pred_xyz, 100000, tag='./Vis/debug_gt'+str(k), nb_vis=1, title_batch=[clip_text[k]], outname=[os.path.join('./results/maskgit_debug', 'gt'+str(k)+'.gif')])
-
-                        # quit()
-
-
         nb_iter += 1
         if nb_iter % args.print_iter ==  0 :
             avg_loss_cls = avg_loss_cls / args.print_iter
@@ -400,7 +324,7 @@ if __name__ == '__main__':
                 best_top2, 
                 best_top3, 
                 best_matching, 
-                clip_model=clip_model, eval_wrapper=eval_wrapper, optimizer=optimizer, scheduler=scheduler)
+                clip_model=None, eval_wrapper=eval_wrapper, optimizer=optimizer, scheduler=scheduler)
 
 
         if nb_iter % 1000 == 0:

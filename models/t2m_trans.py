@@ -173,13 +173,13 @@ class Text2Motion_Transformer(nn.Module):
         text_mask=None,
         cond_scale = 3,
     ):
-        length_logit, logits = self.forward(idxs, clip_feature, token_mask=None, text_mask=None)
+        length_logit, logits = self.forward(idxs, clip_feature, token_mask=token_mask, text_mask=text_mask)
 
         if cond_scale == 1:
             return logits
 
-        text_mask = torch.zeros_like(idxs).bool()
-        _, null_logits = self.forward(idxs, clip_feature, token_mask=None, text_mask=text_mask)
+        # text_mask = torch.zeros_like(idxs).bool()
+        _, null_logits = self.forward(idxs, clip_feature, token_mask=token_mask, text_mask=text_mask)
         return length_logit, null_logits + (logits - null_logits) * cond_scale
 
     def sample(self, clip_feature, if_categorial=False):

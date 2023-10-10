@@ -12,7 +12,22 @@ from torch.utils.data._utils.collate import default_collate
 
 def collate_fn(batch):
     batch.sort(key=lambda x: x[3], reverse=True)
-    return default_collate(batch)
+
+    t5_embedding_list = [b[-1] for b in batch]
+    original_batch = [b[:-1] for b in batch]
+
+    len_embedding = [e.shape[1] for e in t5_embedding_list]
+    max_len_embed = max(len_embedding)
+
+    t5_embedding_tensor = torch.zeros((len(batch), max_len_embed, 768), dtype=torch.float)
+    t5_embedding_mask = torch.zeros((len(batch), max_len_embed), dtype=torch.bool)
+
+    for b, embed in enumerate(t5_embedding_list):
+        t5_embedding_tensor[b, :embed.shape[1]] = embed
+        t5_embedding_mask[b, :embed.shape[1]] = 1
+
+    return default_collate(original_batch), t5_embedding_tensor, t5_embedding_mask
+
 
 
 '''For use of training text-2-motion generative model'''
