@@ -1,4 +1,4 @@
-CUDA_VISIBLE_DEVICES=$1 python3 GPT_eval.py  \
+CUDA_VISIBLE_DEVICES=$1 python3 GPT_eval_multi.py  \
 --exp-name VAL_GPT_MaskGit_classifierfree_new_vae_token_predlength_15layers \
 --batch-size 32 \
 --num-layers 15 \
