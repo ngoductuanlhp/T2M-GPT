@@ -10,7 +10,7 @@ import json
 import clip
 from tqdm import tqdm
 from einops import rearrange, repeat
-
+import math
 import options.option_transformer as option_trans
 import models.vqvae as vqvae
 import utils.utils_model as utils_model
@@ -28,7 +28,9 @@ warnings.filterwarnings('ignore')
 
 from utils.motion_process import recover_from_ric, recover_from_rot
 import visualization.plot_3d_global as plot_3d
+from transformers import AutoModelForSeq2SeqLM, T5ForConditionalGeneration, T5Tokenizer, AutoTokenizer, GPT2LMHeadModel, GPT2Tokenizer
 
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 def tensorborad_add_video_xyz(writer, xyz, nb_iter, tag, nb_vis=4, title_batch=None, outname=None):
     # breakpoint()
@@ -76,6 +78,11 @@ if __name__ == '__main__':
     # clip_model.eval()
     # for p in clip_model.parameters():
     #     p.requires_grad = False
+
+    t5_tokenizer = AutoTokenizer.from_pretrained("checkpoints/flan-t5-base", legacy=True)
+    t5_model = T5ForConditionalGeneration.from_pretrained("checkpoints/flan-t5-base")
+    t5_model = t5_model.eval()
+    t5_model = t5_model.cuda()
 
     net = vqvae.HumanVQVAE(args, ## use args to define different parameters in different quantizers
                         args.nb_code,
@@ -197,11 +204,11 @@ if __name__ == '__main__':
     while nb_iter <= args.total_iter:
         # print(nb_iter)
         batch = next(train_loader_iter)
-        t5_embedding, t5_embedding_mask, m_tokens, m_tokens_len, mask_token = batch
+        clip_text, m_tokens, m_tokens_len, mask_token = batch
         m_tokens, m_tokens_len, mask_token = m_tokens.cuda(), m_tokens_len.cuda(), mask_token.cuda()
 
-        t5_embedding = t5_embedding.cuda()
-        t5_embedding_mask = t5_embedding_mask.cuda()
+        # t5_embedding = t5_embedding.cuda()
+        # t5_embedding_mask = t5_embedding_mask.cuda()
         # breakpoint()
         bs, seq_len = m_tokens.shape[0], m_tokens.shape[1]
         # seq_len = seq_len -1 # FIXME -1 to remove the [END] token
@@ -209,7 +216,29 @@ if __name__ == '__main__':
         target = m_tokens   # (bs, 26)
         device = target.device
 
+        clip_text = list(clip_text)
+        len_clip_text = [len(t) for t in clip_text]
+        max_len_clip_text = max(len_clip_text)
+        # max_len_clip_text = math.ceil(max_len_clip_text/8) * 8
+
         
+        t5_tokens = t5_tokenizer(clip_text, return_tensors="pt", max_length=max_len_clip_text, padding=True)
+        # print(input_ids)
+        # forward pass through encoder only
+        t5_input_ids = t5_tokens["input_ids"].cuda()
+        t5_embedding_mask = t5_tokens["attention_mask"].cuda()
+        t5_outputs = t5_model.encoder(
+            input_ids=t5_input_ids, 
+            attention_mask=t5_embedding_mask, 
+            return_dict=True
+        )
+        t5_embedding = t5_outputs.last_hidden_state
+        t5_embedding_mask = t5_embedding_mask.bool()
+        # if t5_embedding_mask.shape[1] % 8 != 0:
+        #     t5_embedding = torch.cat([t5_embedding, torch.zeros((bs, 8-(t5_embedding_mask.shape[1] % 8), t5_embedding.shape[-1]), dtype=torch.float, device=t5_embedding.device)], dim=1)
+        #     t5_embedding_mask = torch.cat([t5_embedding_mask, torch.zeros((bs, 8-(t5_embedding_mask.shape[1] % 8)), dtype=torch.bool, device=t5_embedding_mask.device)], dim=1)
+
+        # breakpoint()
         # text = clip.tokenize(clip_text, truncate=True).cuda()
         # feat_clip_text = clip_model.encode_text(text).float()
 
@@ -276,7 +305,9 @@ if __name__ == '__main__':
         loss_length = loss_ce_length(length_pred, m_tokens_len)
 
 
-        probs = torch.softmax(cls_pred_, dim=-1)
+        probs = torch.softmax(cls_pred_, dim=-1).detach()
+        probs = torch.nan_to_num(probs, nan=1e-3)
+        # breakpoint()
         dist = Categorical(probs)
         cls_pred_index = dist.sample()
 
@@ -327,13 +358,13 @@ if __name__ == '__main__':
                 clip_model=None, eval_wrapper=eval_wrapper, optimizer=optimizer, scheduler=scheduler)
 
 
-        if nb_iter % 1000 == 0:
-            
+        if nb_iter % 5000 == 0:
             save_path = os.path.join(args.out_dir, 'net_last.pth')
             if os.path.isfile(save_path):
                 os.remove(save_path)
-            
             torch.save({'trans' : trans_encoder.state_dict(), 'optimizer': optimizer.state_dict(), 'scheduler': scheduler.state_dict(), 'nb_iter': nb_iter}, save_path)
+            
+            
             
             new_save_path = os.path.join(args.out_dir, f'net_{nb_iter}.pth')
             copy_cmd = f'cp "{save_path}" "{new_save_path}"'

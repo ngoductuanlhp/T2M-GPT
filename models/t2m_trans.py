@@ -6,6 +6,8 @@ from torch.distributions import Categorical
 import models.pos_encoding as pos_encoding
 from einops import rearrange, einsum
 # from models.attention import Attention, FeedForward
+import xformers
+import xformers.ops
 
 def prob_mask_like(shape, prob, device):
     if prob == 1:
@@ -140,17 +142,32 @@ class Text2Motion_Transformer(nn.Module):
         # if text_mask is not None:
         #     text_mask = torch.cat([length_mask, text_mask], dim=1)
 
+        if text_mask is not None:
+            mask_all = (torch.sum(text_mask.float(), dim=1) > 0)
+            mask_all = mask_all.float()[:, None, None]
+            # y = torch.where(mask_all[:, None, None].expand(B, T, C), y, 0.0)
+
         # breakpoint()
         # NOTE Add text condition to queries 
         if not self.has_cross_attn:
             x = x + self.context_norm(context_embeddings)
 
+        # breakpoint()
         for (self_attn, cross_attn, ff) in self.blocks:
             x = self_attn(x, mask=token_mask) + x
 
             if self.has_cross_attn:
-                x = cross_attn(x, context=context_embeddings, mask=text_mask) + x
-
+                # cross_attn_out_ = cross_attn(x, context=context_embeddings, mask=text_mask) #  * mask_all[:, None, None]
+                
+                # breakpoint()
+                # cross_attn_out_ = torch.where(mask_all, cross_attn_out_, 0.0)
+                
+                # cross_attn_out_ = cross_attn_out * mask_all.float()[:, None, None]
+                # cross_attn_out = torch.nan_to_num(cross_attn_out_, nan=0.0)
+                x = cross_attn(x, context=context_embeddings, mask=text_mask) * mask_all + x
+                # print(x.shape)
+                # if torch.any(torch.isnan(x)):
+                #     breakpoint()
             x = ff(x) + x
 
             # x = block(x, context=context_embeddings, self_attn_mask=token_mask, cross_attn_mask=text_mask)
@@ -216,6 +233,8 @@ class Attention(nn.Module):
     def __init__(self, embed_dim=512, block_size=16, n_head=8, drop_out_rate=0.0, norm_context=False):
         super().__init__()
         assert embed_dim % 8 == 0
+
+        self.drop_out_rate = drop_out_rate
         # key, query, value projections for all heads
         self.key = nn.Linear(embed_dim, embed_dim)
         self.query = nn.Linear(embed_dim, embed_dim)
@@ -261,9 +280,8 @@ class Attention(nn.Module):
             #     mask = rearrange(mask, 'b j -> b 1 j 1')
             # else:
             #     mask = rearrange(mask, 'b j -> b 1 1 j')
-            # mask = rearrange(mask, 'b j -> b 1 j 1')
-            mask = rearrange(mask, 'b j -> b 1 1 j')
             # breakpoint()
+            mask = rearrange(mask, 'b j -> b 1 1 j')
             att = att.masked_fill(~mask, -torch.finfo(att.dtype).max)
         # att = att.masked_fill(self.mask[:,:,:T,:T] == 0, float('-inf'))
         att = F.softmax(att, dim=-1)
@@ -276,6 +294,74 @@ class Attention(nn.Module):
         # output projection
         y = self.resid_drop(self.proj(y))
         return y
+
+    # def forward(self, x, context=None, mask=None):
+    #     B, T, C = x.size() 
+
+    #     x = self.norm(x)
+    #     if context is not None:
+    #         context = self.context_norm(context)
+
+    #     kv_input = context if context is not None else x
+
+    #     # calculate query, key, values for all heads in batch and move head forward to be the batch dim
+    #     # k = rearrange(self.key(kv_input), 'b n (h d) -> b h n d', h=self.n_head)
+    #     # v = rearrange(self.value(kv_input), 'b n (h d) -> b h n d', h=self.n_head)
+    #     # q = rearrange(self.query(x), 'b n (h d) -> b h n d', h=self.n_head)
+    #     # v = self.value(kv_input).view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
+    #     # q = self.query(x).view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
+    #     # causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
+    #     # breakpoint()
+    #     k = rearrange(self.key(kv_input), 'b n (h d) -> b n h d', h=self.n_head)
+    #     v = rearrange(self.value(kv_input), 'b n (h d) -> b n h d', h=self.n_head)
+    #     q = rearrange(self.query(x), 'b n (h d) -> b n h d', h=self.n_head)
+        
+    #     attn_bias = None
+    #     if mask is not None:
+    #         # att = att.masked_fill(self.mask[:,:,:T,:T] == 0, float('-inf'))
+    #         # if context is not None:
+    #         #     mask = rearrange(mask, 'b j -> b 1 j 1')
+    #         # else:
+    #         #     mask = rearrange(mask, 'b j -> b 1 1 j')
+    #         # mask = rearrange(mask, 'b j -> b 1 j 1')
+    #         # mask = rearrange(mask, 'b j -> b 1 1 j')
+    #         mask_ = mask[:, None, None, :].expand(B, self.n_head, q.shape[1], k.shape[1])
+    #         attn_bias = torch.where(mask_, 0, -torch.finfo(q.dtype).max)
+
+    #         if context is not None:
+    #             mask_all = (torch.sum(mask.float(), dim=1) > 0)[:, None, None, None].expand(B, self.n_head, q.shape[1], k.shape[1])
+    #             attn_bias = torch.where(mask_all, attn_bias, 1e-3)
+
+    #         # attn_bias = torch.where(mask, 0, 0.1)
+    #     y = xformers.ops.memory_efficient_attention(q, k, v, attn_bias=attn_bias, p=self.drop_out_rate)
+        
+
+    #     # att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
+
+    #     # if mask is not None:
+    #     #     # att = att.masked_fill(self.mask[:,:,:T,:T] == 0, float('-inf'))
+    #     #     # if context is not None:
+    #     #     #     mask = rearrange(mask, 'b j -> b 1 j 1')
+    #     #     # else:
+    #     #     #     mask = rearrange(mask, 'b j -> b 1 1 j')
+    #     #     # mask = rearrange(mask, 'b j -> b 1 j 1')
+    #     #     mask = rearrange(mask, 'b j -> b 1 1 j')
+    #     #     # breakpoint()
+    #     #     att = att.masked_fill(~mask, -torch.finfo(att.dtype).max)
+    #     # # att = att.masked_fill(self.mask[:,:,:T,:T] == 0, float('-inf'))
+    #     # att = F.softmax(att, dim=-1)
+    #     # att = self.attn_drop(att)
+
+    #     # # breakpoint()
+    #     # y = att @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
+    #     # y = y.transpose(1, 2).contiguous().view(B, T, C) # re-assemble all head outputs side by side
+    #     y = rearrange(y, 'b n h d -> b n (h d)', h=self.n_head)
+    #     # if mask is not None and context is not None:
+    #     #     mask_all = (torch.sum(mask.float(), dim=1) == 0)
+    #     #     y = torch.where(mask_all[:, None, None].expand(B, T, C), y, 0.0)
+    #     # output projection
+    #     y = self.resid_drop(self.proj(y))
+    #     return y
 
 class CrossConditionalSelfAttention(nn.Module):
 

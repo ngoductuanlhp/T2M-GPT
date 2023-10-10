@@ -442,7 +442,7 @@ def evaluation_transformer(args, out_dir, val_loader, net, trans, logger, writer
             bs, pose_seq = pose.shape[:2]
             seq = 50
 
-            text = clip.tokenize(clip_text, truncate=True).cuda()
+            # text = clip.tokenize(clip_text, truncate=True).cuda()
 
             # feat_clip_text = clip_model.encode_text(text).float()
             pred_pose_eval = torch.zeros((bs, pose_seq, pose.shape[-1])).cuda()

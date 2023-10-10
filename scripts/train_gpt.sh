@@ -1,6 +1,6 @@
 CUDA_VISIBLE_DEVICES=$1 python3 train_t2m_trans.py  \
---exp-name GPT_MaskGit_classifierfree_predlength_15layers_t5_embedding \
---batch-size 96 \
+--exp-name GPT_MaskGit_classifierfree_predlength_15layers_t5_embedding2 \
+--batch-size 32 \
 --num-layers 15 \
 --clip-dim 768 \
 --embed-dim-gpt 1024 \
@@ -13,8 +13,8 @@ CUDA_VISIBLE_DEVICES=$1 python3 train_t2m_trans.py  \
 --resume-pth pretrained/VQVAE/net_last.pth \
 --vq-name VQVAE \
 --out-dir output \
---total-iter 400000 \
---lr-scheduler 200000 \
+--total-iter 300000 \
+--lr-scheduler 250000 \
 --lr 0.0001 \
 --dataname t2m \
 --split train \
@@ -24,5 +24,6 @@ CUDA_VISIBLE_DEVICES=$1 python3 train_t2m_trans.py  \
 --eval-iter 20000 \
 --pkeep 0.5 \
 --dilation-growth-rate 3 \
---vq-act relu \
---resume-trans output/GPT_MaskGit_classifierfree_predlength_15layers_t5_embedding/net_1000.pth
+--vq-act relu 
+# \
+# --resume-trans output/GPT_MaskGit_classifierfree_predlength_15layers_t5_embedding/net_1000.pth

@@ -126,7 +126,8 @@ class Text2MotionDataset(data.Dataset):
 
                                 data_dict[new_name] = {'m_token_list': m_token_list_new,
                                                        'text':[text_dict],
-                                                       'flan_t5_embedding': flan_t5_embedding_list}
+                                                    #    'flan_t5_embedding': flan_t5_embedding_list
+                                                       }
                                 new_name_list.append(new_name)
                         except:
                             pass
@@ -134,7 +135,8 @@ class Text2MotionDataset(data.Dataset):
                 if flag:
                     data_dict[name] = {'m_token_list': m_token_list,
                                        'text':text_data,
-                                       'flan_t5_embedding': flan_t5_embedding_list}
+                                    #    'flan_t5_embedding': flan_t5_embedding_list
+                                       }
                     new_name_list.append(name)
             except:
                 pass
@@ -154,12 +156,15 @@ class Text2MotionDataset(data.Dataset):
         data = self.data_dict[self.name_list[item]]
 
         # print(data.keys())
-        m_token_list, t5_embedding_list = data['m_token_list'], data['flan_t5_embedding'] # data['text']
+        m_token_list, text_list = data['m_token_list'], data['text'] # , data['flan_t5_embedding'] 
         m_tokens = random.choice(m_token_list)
+
+        text_data = random.choice(text_list)
+        caption = text_data['caption']
 
         # print(len(m_token_list), m_token_list)
 
-        t5_embedding = random.choice(t5_embedding_list)
+        # t5_embedding = random.choice(t5_embedding_list)
         # t5_embedding = t5_embedding['caption']
         # t5_embedding = text_data['flan_t5_embedding']
 
@@ -194,7 +199,7 @@ class Text2MotionDataset(data.Dataset):
         m_tokens = m_tokens.reshape(-1)
 
         # print('dataloader', t5_embedding.shape)
-        return t5_embedding, m_tokens, m_tokens_len, mask_token
+        return caption, m_tokens, m_tokens_len, mask_token
 
 
 
@@ -207,7 +212,7 @@ def DATALoader(dataset_name,
                                               batch_size,
                                               shuffle=True,
                                               num_workers=num_workers,
-                                              collate_fn=collate_fn,
+                                            #   collate_fn=collate_fn,
                                               drop_last = True)
     
 
