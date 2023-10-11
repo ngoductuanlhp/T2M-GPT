@@ -146,3 +146,19 @@ def calc_pampjpe(preds, target, sample_wise=True, return_transform_mat=False):
         return pa_mpjpe_each, PA_transform
     else:
         return pa_mpjpe_each
+    
+def calc_accel(preds, target):
+    """
+    Mean joint acceleration error
+    often referred to as "Protocol #1" in many papers.
+    """
+    assert preds.shape == target.shape, print(preds.shape,
+                                              target.shape)  # BxJx3
+    assert preds.dim() == 3
+    # Expects BxJx3
+    # valid_mask = torch.BoolTensor(target[:, :, 0].shape)
+    accel_gt = target[:-2] - 2 * target[1:-1] + target[2:]
+    accel_pred = preds[:-2] - 2 * preds[1:-1] + preds[2:]
+    normed = torch.linalg.norm(accel_pred - accel_gt, dim=-1)
+    accel_seq = normed.mean(1)
+    return accel_seq

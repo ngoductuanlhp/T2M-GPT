@@ -8,7 +8,7 @@ from scipy import linalg
 import visualization.plot_3d_global as plot_3d
 from utils.motion_process import recover_from_ric, recover_from_rot
 from tqdm import tqdm
-from utils.metric_utils import *
+from utils.metric_utils import calc_mpjpe, calc_pampjpe, calc_accel
 
 
 
@@ -35,6 +35,7 @@ def evaluation_vqvae(out_dir, val_loader, net, logger, writer, nb_iter, best_fid
 
     mpjpe_list = []
     pampjpe_list = []
+    accel_list = []
     len_xyz_list = []
 
     R_precision_real = 0
@@ -80,10 +81,12 @@ def evaluation_vqvae(out_dir, val_loader, net, logger, writer, nb_iter, best_fid
             # NOTE cal MPJE
             mpjpe = calc_mpjpe(pred_xyz[0], pose_xyz[0]).sum().cpu()
             pampjpe = calc_pampjpe(pred_xyz[0], pose_xyz[0]).sum().cpu()
+            accel = calc_accel(pred_xyz[0], pose_xyz[0]).sum().cpu()
             # breakpoint()
 
             mpjpe_list.append(mpjpe)
             pampjpe_list.append(pampjpe)
+            accel_list.append(accel)
             len_xyz_list.append(pred_xyz.shape[1])
 
 
@@ -107,7 +110,8 @@ def evaluation_vqvae(out_dir, val_loader, net, logger, writer, nb_iter, best_fid
     total_len_cal_mpjpe = torch.tensor(len_xyz_list).sum()
     mpjpe = torch.tensor(mpjpe_list).sum() / total_len_cal_mpjpe
     pampjpe = torch.tensor(pampjpe_list).sum() / total_len_cal_mpjpe
-    logger.info(f"MPJPE: {mpjpe:.4f}, PAMPJPE: {pampjpe:.4f}")
+    accel = torch.tensor(accel_list).sum() / total_len_cal_mpjpe
+    logger.info(f"MPJPE: {mpjpe:.4f}, PAMPJPE: {pampjpe:.4f}, ACCEL: {accel:.4f}")
 
     motion_annotation_np = torch.cat(motion_annotation_list, dim=0).cpu().numpy()
     motion_pred_np = torch.cat(motion_pred_list, dim=0).cpu().numpy()
