@@ -8,7 +8,7 @@ from scipy import linalg
 import visualization.plot_3d_global as plot_3d
 from utils.motion_process import recover_from_ric, recover_from_rot
 from tqdm import tqdm
-
+from utils.metric_utils import *
 
 
 
@@ -33,13 +33,17 @@ def evaluation_vqvae(out_dir, val_loader, net, logger, writer, nb_iter, best_fid
     motion_annotation_list = []
     motion_pred_list = []
 
+    mpjpe_list = []
+    pampjpe_list = []
+    len_xyz_list = []
+
     R_precision_real = 0
     R_precision = 0
 
     nb_sample = 0
     matching_score_real = 0
     matching_score_pred = 0
-    for batch in val_loader:
+    for b, batch in enumerate(val_loader):
         word_embeddings, pos_one_hots, caption, sent_len, motion, m_length, token, name = batch
 
         motion = motion.cuda()
@@ -60,6 +64,7 @@ def evaluation_vqvae(out_dir, val_loader, net, logger, writer, nb_iter, best_fid
             pred_pose, loss_commit, perplexity = net(motion[i:i+1, :m_length[i]])
             pred_denorm = val_loader.dataset.inv_transform(pred_pose.detach().cpu().numpy())
             pred_xyz = recover_from_ric(torch.from_numpy(pred_denorm).float().cuda(), num_joints)
+
             
             if savenpy:
                 np.save(os.path.join(out_dir, name[i]+'_gt.npy'), pose_xyz[:, :m_length[i]].cpu().numpy())
@@ -71,6 +76,16 @@ def evaluation_vqvae(out_dir, val_loader, net, logger, writer, nb_iter, best_fid
                 draw_org.append(pose_xyz)
                 draw_pred.append(pred_xyz)
                 draw_text.append(caption[i])
+
+            # NOTE cal MPJE
+            mpjpe = calc_mpjpe(pred_xyz[0], pose_xyz[0]).sum().cpu()
+            pampjpe = calc_pampjpe(pred_xyz[0], pose_xyz[0]).sum().cpu()
+            # breakpoint()
+
+            mpjpe_list.append(mpjpe)
+            pampjpe_list.append(pampjpe)
+            len_xyz_list.append(pred_xyz.shape[1])
+
 
         et_pred, em_pred = eval_wrapper.get_co_embeddings(word_embeddings, pos_one_hots, sent_len, pred_pose_eval, m_length)
 
@@ -85,6 +100,14 @@ def evaluation_vqvae(out_dir, val_loader, net, logger, writer, nb_iter, best_fid
         matching_score_pred += temp_match
 
         nb_sample += bs
+
+        # if b == 2: break
+
+    
+    total_len_cal_mpjpe = torch.tensor(len_xyz_list).sum()
+    mpjpe = torch.tensor(mpjpe_list).sum() / total_len_cal_mpjpe
+    pampjpe = torch.tensor(pampjpe_list).sum() / total_len_cal_mpjpe
+    logger.info(f"MPJPE: {mpjpe:.4f}, PAMPJPE: {pampjpe:.4f}")
 
     motion_annotation_np = torch.cat(motion_annotation_list, dim=0).cpu().numpy()
     motion_pred_np = torch.cat(motion_pred_list, dim=0).cpu().numpy()
@@ -102,8 +125,11 @@ def evaluation_vqvae(out_dir, val_loader, net, logger, writer, nb_iter, best_fid
 
     fid = calculate_frechet_distance(gt_mu, gt_cov, mu, cov)
 
+
     msg = f"--> \t Eva. Iter {nb_iter} :, FID. {fid:.4f}, Diversity Real. {diversity_real:.4f}, Diversity. {diversity:.4f}, R_precision_real. {R_precision_real}, R_precision. {R_precision}, matching_score_real. {matching_score_real}, matching_score_pred. {matching_score_pred}"
     logger.info(msg)
+
+    
     
     if draw:
         writer.add_scalar('./Test/FID', fid, nb_iter)
