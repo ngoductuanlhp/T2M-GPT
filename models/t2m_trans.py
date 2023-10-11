@@ -138,6 +138,7 @@ class Text2Motion_Transformer(nn.Module):
         if text_mask is not None:
             text_mask = torch.cat([length_mask, text_mask], dim=1)
 
+        mask_all = None
         if text_mask is not None:
             mask_all = (torch.sum(text_mask.float(), dim=1) > 0)
             mask_all = mask_all.float()[:, None, None]
@@ -151,7 +152,10 @@ class Text2Motion_Transformer(nn.Module):
             x = self_attn(x, mask=token_mask) + x
 
             if self.has_cross_attn:
-                x = cross_attn(x, context=context_embeddings, mask=text_mask) * mask_all + x
+                cross_attn_out = cross_attn(x, context=context_embeddings, mask=text_mask) 
+                if mask_all is not None:
+                    cross_attn_out = cross_attn_out * mask_all
+                x = cross_attn_out + x
 
             x = ff(x) + x
 
@@ -175,7 +179,8 @@ class Text2Motion_Transformer(nn.Module):
         text_mask=None,
         cond_scale = 3,
     ):
-        length_logit, logits = self.forward(idxs, clip_feature, token_mask=None, text_mask=None)
+        text_mask = torch.ones_like(idxs).bool()
+        length_logit, logits = self.forward(idxs, clip_feature, token_mask=None, text_mask=text_mask)
 
         if cond_scale == 1:
             return logits
