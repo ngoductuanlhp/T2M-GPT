@@ -1,6 +1,6 @@
 CUDA_VISIBLE_DEVICES=$1 python3 train_t2m_trans.py  \
 --exp-name MaskGIT_t5_embedding2_separatepredlength \
---batch-size 32 \
+--batch-size 96 \
 --num-layers 15 \
 --clip-dim 768 \
 --embed-dim-gpt 1024 \
@@ -13,9 +13,9 @@ CUDA_VISIBLE_DEVICES=$1 python3 train_t2m_trans.py  \
 --resume-pth pretrained/VQVAE/net_last.pth \
 --vq-name VQVAE \
 --out-dir output \
---total-iter 800000 \
---lr-scheduler 500000 \
---lr 0.00005 \
+--total-iter 300000 \
+--lr-scheduler 200000 \
+--lr 0.0001 \
 --dataname t2m \
 --split train \
 --down-t 2 \
