@@ -106,10 +106,24 @@ class Text2Motion_Transformer(nn.Module):
                 )
             ]))
 
+        self.length_blocks = nn.ModuleList([])
+        for l in range(3):
+            self.length_blocks.append(nn.ModuleList([
+                Attention(embed_dim=embed_dim, block_size=block_size, n_head=n_head, drop_out_rate=drop_out_rate, norm_context=True),
+                nn.Sequential(
+                    nn.LayerNorm(embed_dim),
+                    nn.Linear(embed_dim, fc_rate * embed_dim),
+                    nn.GELU(),
+                    nn.Dropout(drop_out_rate),
+                    nn.Linear(fc_rate * embed_dim, embed_dim),
+                )
+            ]))
+
         if not self.has_cross_attn:
             self.context_norm = nn.LayerNorm(embed_dim)
 
         self.ln_f = nn.LayerNorm(embed_dim)
+        self.length_ln_f = nn.LayerNorm(embed_dim)
         self.head = nn.Linear(embed_dim, num_vq, bias=False)
         self.length_head = nn.Linear(embed_dim, block_size-4, bias=False) # 47 value: 0->4 length, 46-> 50 length
         self.block_size = block_size
@@ -131,14 +145,14 @@ class Text2Motion_Transformer(nn.Module):
         context_embeddings = self.cond_emb(clip_feature)
         # token_embeddings = torch.cat([self.cond_emb(clip_feature).unsqueeze(1), token_embeddings], dim=1)
         
-        length_embeddings = self.length_token.repeat(token_embeddings.shape[0], 1, 1)
-        token_embeddings = torch.cat([length_embeddings, token_embeddings], dim=1)
+        # length_embeddings = self.length_token.repeat(token_embeddings.shape[0], 1, 1)
+        # token_embeddings = torch.cat([length_embeddings, token_embeddings], dim=1)
         x = self.pos_embed(token_embeddings)
         # x = token_embeddings
-        length_mask = torch.ones((token_embeddings.shape[0], 1), dtype=torch.bool, device=token_embeddings.device)
+        # length_mask = torch.ones((token_embeddings.shape[0], 1), dtype=torch.bool, device=token_embeddings.device)
        
-        if token_mask is not None:
-            token_mask = torch.cat([length_mask, token_mask], dim=1)
+        # if token_mask is not None:
+        #     token_mask = torch.cat([length_mask, token_mask], dim=1)
         # if text_mask is not None:
         #     text_mask = torch.cat([length_mask, text_mask], dim=1)
 
@@ -172,11 +186,20 @@ class Text2Motion_Transformer(nn.Module):
 
             # x = block(x, context=context_embeddings, self_attn_mask=token_mask, cross_attn_mask=text_mask)
 
-        x = self.ln_f(x)
+        length_feats = self.length_token.repeat(token_embeddings.shape[0], 1, 1)
+        for (l_cross_attn, l_ff) in self.length_blocks:
+            length_feats = l_cross_attn(length_feats, context=x, mask=token_mask) + length_feats
+            length_feats = l_ff(length_feats) + length_feats
 
-        length_logit = self.length_head(x[:, 0])
-        logits = self.head(x[:, 1:])
+
+        logits = self.head(self.ln_f(x))
+        length_logit = self.length_head(self.length_ln_f(length_feats)).squeeze(1)
         return length_logit, logits
+        # x = self.ln_f(x)
+
+        # length_logit = self.length_head(x[:, 0])
+        # logits = self.head(x[:, 1:])
+        # return length_logit, logits
     
         # breakpoint()
         # logits = self.transformer(idxs, clip_feature, token_mask=token_mask, text_mask=text_mask)
