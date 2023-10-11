@@ -409,9 +409,10 @@ if __name__ == '__main__':
             
             torch.save({'trans' : trans_encoder.state_dict(), 'optimizer': optimizer.state_dict(), 'scheduler': scheduler.state_dict(), 'nb_iter': nb_iter}, save_path)
             
-            new_save_path = os.path.join(args.out_dir, f'net_{nb_iter}.pth')
-            copy_cmd = f'cp "{save_path}" "{new_save_path}"'
-            os.system(copy_cmd)
+            if nb_iter % 5000 == 0:
+                new_save_path = os.path.join(args.out_dir, f'net_{nb_iter}.pth')
+                copy_cmd = f'cp "{save_path}" "{new_save_path}"'
+                os.system(copy_cmd)
             # torch.save({'trans' : trans.state_dict(), 'optimizer': optimizer.state_dict(), 'scheduler': scheduler.state_dict()}, os.path.join(out_dir, f'net_{nb_iter}.pth'))
 
 

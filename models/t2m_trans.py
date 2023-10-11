@@ -138,6 +138,10 @@ class Text2Motion_Transformer(nn.Module):
         if text_mask is not None:
             text_mask = torch.cat([length_mask, text_mask], dim=1)
 
+        if text_mask is not None:
+            mask_all = (torch.sum(text_mask.float(), dim=1) > 0)
+            mask_all = mask_all.float()[:, None, None]
+
         # breakpoint()
         # NOTE Add text condition to queries 
         if not self.has_cross_attn:
@@ -147,7 +151,7 @@ class Text2Motion_Transformer(nn.Module):
             x = self_attn(x, mask=token_mask) + x
 
             if self.has_cross_attn:
-                x = cross_attn(x, context=context_embeddings, mask=text_mask) + x
+                x = cross_attn(x, context=context_embeddings, mask=text_mask) * mask_all + x
 
             x = ff(x) + x
 
