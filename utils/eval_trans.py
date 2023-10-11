@@ -9,7 +9,7 @@ import visualization.plot_3d_global as plot_3d
 from utils.motion_process import recover_from_ric, recover_from_rot, recover_from_ric2, recover_humanml3d
 from tqdm import tqdm
 
-
+from utils.metric_utils import *
 
 
 def tensorborad_add_video_xyz(writer, xyz, nb_iter, tag, nb_vis=4, title_batch=None, outname=None):
@@ -29,6 +29,9 @@ def evaluation_vqvae(out_dir, val_loader, net, logger, writer, nb_iter, best_fid
     draw_pred = []
     draw_text = []
 
+    mpjpe_list = []
+    pampjpe_list = []
+    len_xyz_list = []
 
     motion_annotation_list = []
     motion_pred_list = []
@@ -75,6 +78,15 @@ def evaluation_vqvae(out_dir, val_loader, net, logger, writer, nb_iter, best_fid
                 draw_pred.append(pred_xyz)
                 draw_text.append(caption[i])
 
+            # NOTE cal MPJE
+            mpjpe = calc_mpjpe(pred_xyz[0], pose_xyz[0]).sum().cpu()
+            pampjpe = calc_pampjpe(pred_xyz[0], pose_xyz[0]).sum().cpu()
+            # breakpoint()
+
+            mpjpe_list.append(mpjpe)
+            pampjpe_list.append(pampjpe)
+            len_xyz_list.append(pred_xyz.shape[1])
+
         et_pred, em_pred = eval_wrapper.get_co_embeddings(word_embeddings, pos_one_hots, sent_len, pred_pose_eval, m_length)
 
         motion_pred_list.append(em_pred)
@@ -88,6 +100,11 @@ def evaluation_vqvae(out_dir, val_loader, net, logger, writer, nb_iter, best_fid
         matching_score_pred += temp_match
 
         nb_sample += bs
+
+    total_len_cal_mpjpe = torch.tensor(len_xyz_list).sum()
+    mpjpe = torch.tensor(mpjpe_list).sum() / total_len_cal_mpjpe
+    pampjpe = torch.tensor(pampjpe_list).sum() / total_len_cal_mpjpe
+    logger.info(f"MPJPE: {mpjpe:.4f}, PAMPJPE: {pampjpe:.4f}")
 
     motion_annotation_np = torch.cat(motion_annotation_list, dim=0).cpu().numpy()
     motion_pred_np = torch.cat(motion_pred_list, dim=0).cpu().numpy()
