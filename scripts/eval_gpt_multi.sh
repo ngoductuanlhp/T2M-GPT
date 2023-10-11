@@ -1,7 +1,7 @@
-CUDA_VISIBLE_DEVICES=$1 python3 GPT_eval.py  \
+CUDA_VISIBLE_DEVICES=$1 python3 GPT_eval_multi.py  \
 --exp-name VAL_GPT_MaskGit_classifierfree_predlength_15layers_t5_embedding2 \
 --batch-size 32 \
---num-layers 18 \
+--num-layers 15 \
 --clip-dim 768 \
 --embed-dim-gpt 1024 \
 --nb-code 512 \
@@ -17,7 +17,7 @@ CUDA_VISIBLE_DEVICES=$1 python3 GPT_eval.py  \
 --lr-scheduler 150000 \
 --lr 0.0001 \
 --dataname t2m \
---split val \
+--split test \
 --down-t 2 \
 --depth 3 \
 --quantizer ema_reset \

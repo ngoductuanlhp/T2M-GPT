@@ -455,15 +455,9 @@ def evaluation_transformer(args, out_dir, val_loader, net, trans, logger, writer
             # pose = pose.cuda().float() # bs, nb_joints, joints_dim, seq_len
             # ids = net.encode(pose)
 
-            ids = torch.full((bs, seq_len), net.vqvae.num_code + 2, dtype = torch.long).cuda()
-            # ids = gt_ids
-            # rand_ = torch.rand((bs, seq_len), dtype = torch.float).cuda()
-            # ids[rand_ < 0.3] = net.vqvae.num_code + 2
-            # scores = torch.zeros((bs, seq_len), dtype = torch.float32).cuda()
-
-
-            text_mask = t5_embedding_mask
+            ids = torch.full((bs, seq_len), net.vqvae.num_code, dtype = torch.long).cuda()
             mask = torch.ones((bs, seq_len), dtype = torch.bool).cuda()
+            text_mask = t5_embedding_mask
             # breakpoint()
             scores = None
             num_tokens = seq
@@ -644,7 +638,7 @@ def evaluation_transformer(args, out_dir, val_loader, net, trans, logger, writer
 
 
 @torch.no_grad()        
-def evaluation_transformer_test(out_dir, val_loader, net, trans, logger, writer, nb_iter, best_fid, best_iter, best_div, best_top1, best_top2, best_top3, best_matching, best_multi, clip_model, eval_wrapper, draw = True, save = True, savegif=False, savenpy=False) : 
+def evaluation_transformer_test(args, out_dir, val_loader, net, trans, logger, writer, nb_iter, best_fid, best_iter, best_div, best_top1, best_top2, best_top3, best_matching, best_multi, clip_model, eval_wrapper, draw = True, save = True, savegif=False, savenpy=False) : 
 
     trans.eval()
     nb_sample = 0
@@ -667,29 +661,99 @@ def evaluation_transformer_test(out_dir, val_loader, net, trans, logger, writer,
     
     for batch in val_loader:
 
-        word_embeddings, pos_one_hots, clip_text, sent_len, pose, m_length, token, name = batch
-        bs, seq = pose.shape[:2]
+        (word_embeddings, pos_one_hots, clip_text, sent_len, pose, m_length, token, name), t5_embedding, t5_embedding_mask = batch
+        
+        
+        t5_embedding = t5_embedding.cuda()
+        t5_embedding_mask = t5_embedding_mask.cuda()
+        
         num_joints = 21 if pose.shape[-1] == 251 else 22
         
-        text = clip.tokenize(clip_text, truncate=True).cuda()
+        # text = clip.tokenize(clip_text, truncate=True).cuda()
 
-        feat_clip_text = clip_model.encode_text(text).float()
-        motion_multimodality_batch = []
-        for i in range(30):
-            pred_pose_eval = torch.zeros((bs, seq, pose.shape[-1])).cuda()
+        # feat_clip_text = clip_model.encode_text(text).float()
+        # motion_multimodality_batch = []
+
+        bs, pose_seq = pose.shape[:2]
+        seq = 50
+        timesteps = 18
+        seq_len = seq
+
+
+        for i in range(1):
+            pred_pose_eval = torch.zeros((bs, pose_seq, pose.shape[-1])).cuda()
             pred_len = torch.ones(bs).long()
-            
-            for k in range(bs):
-                try:
-                    index_motion = trans.sample(feat_clip_text[k:k+1], True)
-                except:
-                    index_motion = torch.ones(1,1).cuda().long()
 
-                pred_pose = net.forward_decoder(index_motion)
+            ids = torch.full((bs, seq_len), net.vqvae.num_code, dtype = torch.long).cuda()
+            mask = torch.ones((bs, seq_len), dtype = torch.bool).cuda()
+            text_mask = t5_embedding_mask
+            
+            scores = None
+            num_tokens = seq
+            shape = (bs, num_tokens)
+            starting_temperature = 0.9
+
+            for step in range(timesteps):
+                # breakpoint()
+                is_first_step = step == 0
+                is_last_step = step == (timesteps - 1)
+
+                steps_til_x0 = timesteps - (step + 1)
+
+                if not is_first_step and (scores is not None):
+                    time = torch.full((1,), step / timesteps).cuda()
+                    num_tokens_mask = (num_tokens * torch.cos(time * np.pi * 0.5)).round().long().clamp(min = 1).cuda()
+
+                    _, indices = scores.topk(num_tokens_mask.item(), dim = -1)
+                    # breakpoint()
+                    mask = torch.zeros(shape).cuda().scatter(1, indices, 1).bool()
+
+                ids = torch.where(mask, net.vqvae.num_code, ids)
+
+                # logits = trans(ids, feat_clip_text, token_mask=None, text_mask=None)
+                if args.cond_drop_prob == 0:
+                    length_logit, logits = trans(ids, t5_embedding, token_mask=None, text_mask=text_mask)
+                else:
+                    length_logit, logits = trans.forward_with_cond_scale(ids, t5_embedding, token_mask=None, text_mask=text_mask)
+
+
+                temperature = starting_temperature * (steps_til_x0 / timesteps)
+                pred_ids = gumbel_sample(logits, temperature = temperature)
+                # pred_ids = logits.argmax(dim=-1)
+
+                ids = torch.where(mask, pred_ids, ids)
+
+                if not is_last_step:
+                    probs = logits.softmax(dim = -1)
+                    scores = probs.gather(2, rearrange(pred_ids, '... -> ... 1'))
+                    scores = 1 - rearrange(scores, '... 1 -> ...')
+                    scores = torch.where(mask, scores, -1e4)
+
+            for k in tqdm(range(bs)):
+                ids_ = ids[k]
+                try:
+                    first_end = torch.argmax(length_logit[k], dim=-1)
+                    first_end = torch.clamp(first_end, 4, 50)
+                except:
+                    first_end = -1
+                    
+                ids_ = ids_[:first_end]
+
+                pred_pose = net.forward_decoder(ids_[None,:])
+
+                # breakpoint()
                 cur_len = pred_pose.shape[1]
 
-                pred_len[k] = min(cur_len, seq)
-                pred_pose_eval[k:k+1, :cur_len] = pred_pose[:, :seq]
+                # pred_len[k] = min(cur_len, pose_seq)
+                pred_len[k] = min(m_length[k], cur_len) # FIXME only for miracle test 
+                # if pred_len[k] < 4:
+                #     continue
+
+                # pred_pose_eval[k:k+1, :pred_len[k]] = pose.cuda()[k:k+1, :pred_len[k]]
+                pred_pose_eval[k:k+1, :pred_len[k]] = pred_pose[:, :pred_len[k]]
+
+
+
 
                 if i == 0 and (draw or savenpy):
                     pred_denorm = val_loader.dataset.inv_transform(pred_pose.detach().cpu().numpy())
@@ -706,7 +770,7 @@ def evaluation_transformer_test(out_dir, val_loader, net, trans, logger, writer,
 
             et_pred, em_pred = eval_wrapper.get_co_embeddings(word_embeddings, pos_one_hots, sent_len, pred_pose_eval, pred_len)
 
-            motion_multimodality_batch.append(em_pred.reshape(bs, 1, -1))
+            # motion_multimodality_batch.append(em_pred.reshape(bs, 1, -1))
             
             if i == 0:
                 pose = pose.cuda().float()
@@ -737,7 +801,7 @@ def evaluation_transformer_test(out_dir, val_loader, net, trans, logger, writer,
 
                 nb_sample += bs
 
-        motion_multimodality.append(torch.cat(motion_multimodality_batch, dim=1))
+        # motion_multimodality.append(torch.cat(motion_multimodality_batch, dim=1))
 
     motion_annotation_np = torch.cat(motion_annotation_list, dim=0).cpu().numpy()
     motion_pred_np = torch.cat(motion_pred_list, dim=0).cpu().numpy()
@@ -754,8 +818,8 @@ def evaluation_transformer_test(out_dir, val_loader, net, trans, logger, writer,
     matching_score_pred = matching_score_pred / nb_sample
 
     multimodality = 0
-    motion_multimodality = torch.cat(motion_multimodality, dim=0).cpu().numpy()
-    multimodality = calculate_multimodality(motion_multimodality, 10)
+    # motion_multimodality = torch.cat(motion_multimodality, dim=0).cpu().numpy()
+    # multimodality = calculate_multimodality(motion_multimodality, 10)
 
     fid = calculate_frechet_distance(gt_mu, gt_cov, mu, cov)
 
