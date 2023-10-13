@@ -504,7 +504,7 @@ def evaluation_transformer(args, out_dir, val_loader, net, trans, logger, writer
                 ids_ = ids[k]
                 try:
                     # first_end = torch.nonzero(ids_ == net.vqvae.num_code).view(-1)[0]
-                    first_end = torch.argmax(length_logit[k], dim=-1)
+                    first_end = torch.argmax(length_logit[k], dim=-1) + 4
                     first_end = torch.clamp(first_end, 4, 50)
                 except:
                     first_end = -1
@@ -744,8 +744,9 @@ def evaluation_transformer_test(args, out_dir, val_loader, net, trans, logger, w
                 # breakpoint()
                 cur_len = pred_pose.shape[1]
 
-                # pred_len[k] = min(cur_len, pose_seq)
-                pred_len[k] = min(m_length[k], cur_len) # FIXME only for miracle test 
+                # cur_len = m_length[k]
+                pred_len[k] = min(cur_len, pose_seq)
+                # pred_len[k] = min(m_length[k], cur_len) # FIXME only for miracle test 
                 # if pred_len[k] < 4:
                 #     continue
 
